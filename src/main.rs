@@ -1,3 +1,6 @@
+// Copyright (c) Fensak, LLC.
+// SPDX-License-Identifier: MPL-2.0
+
 use clap::Parser;
 use std::rc::Rc;
 use anyhow::{Context, Result};
@@ -7,13 +10,19 @@ use deno_ast::SourceTextInfo;
 use deno_core::futures::FutureExt;
 use deno_core::Snapshot;
 
-static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
-
 #[derive(Parser)]
 struct Cli {
-  path: std::path::PathBuf,
+  path: String,
 }
 
+// Load and embed the runtime snapshot built from the build script.
+static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
+
+// The TypeScript module loader
+//
+// TODO
+// - Modify to remove JSX and TSX
+// - Extract to separate file
 struct TsModuleLoader;
 
 impl deno_core::ModuleLoader for TsModuleLoader {
@@ -83,16 +92,17 @@ impl deno_core::ModuleLoader for TsModuleLoader {
   }
 }
 
+// Run the javascript or typescript file available at the given file path through the Deno runtime.
+//
+// TODO
+// - Extract to separate file
 async fn run_js(file_path: &str) -> Result<()> {
-  let builtin_consolejs = deno_core::FastString::from(String::from(include_str!("./builtins/console.js")));
-
   let main_module = deno_core::resolve_path(file_path, std::env::current_dir()?.as_path())?;
   let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
       module_loader: Some(Rc::new(TsModuleLoader)),
       startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
       ..Default::default()
   });
-  js_runtime.execute_script("[senc:builtins/console.js]",  builtin_consolejs).unwrap();
 
   let mod_id = js_runtime.load_main_module(&main_module, None).await?;
   let result = js_runtime.mod_evaluate(mod_id);
@@ -102,15 +112,15 @@ async fn run_js(file_path: &str) -> Result<()> {
 
 fn main() -> Result<()> {
   let args = Cli::parse();
-  let fpath_str = args.path.to_str()
-      .with_context(|| format!("could not read path string `{}`", args.path.display()))?;
 
+  // TODO
+  // - extract to separate file
   let runtime = tokio::runtime::Builder::new_current_thread()
     .enable_all()
     .build()
     .unwrap();
-  runtime.block_on(run_js(fpath_str))
-      .with_context(|| format!("could not execute javascript file `{}`", args.path.display()))?;
+  runtime.block_on(run_js(&args.path))
+      .with_context(|| format!("could not execute javascript file `{}`", args.path))?;
 
   return Ok(());
 }

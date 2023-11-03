@@ -1,3 +1,10 @@
+// Copyright (c) Fensak, LLC.
+// SPDX-License-Identifier: MPL-2.0
+//
+// TODO
+// Switch to ESM syntax
+
+
 // The console API. Makes available the following functions:
 // - console.log
 // - console.error

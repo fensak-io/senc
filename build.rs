@@ -1,3 +1,13 @@
+// Copyright (c) Fensak, LLC.
+// SPDX-License-Identifier: MPL-2.0
+//
+// Build script to create a compiled snapshot of the builtin javascript files to improve startup
+// times. This will:
+// - Load the builtin javascript functions.
+// - Compile the builtin files into a snapshot.
+// - Store the snapshot in the output directory so that it will be embedded into the senc CLI at
+//   compile time.
+
 use std::env;
 use std::path::PathBuf;
 use deno_core::extension;
@@ -29,6 +39,5 @@ fn main() {
   println!("cargo:rerun-if-changed=build.rs");
   // TODO
   // Make dynamic so it uses all files in builtins
-  println!("cargo:rerun-if-changed=src/builtins/index.js");
   println!("cargo:rerun-if-changed=src/builtins/console.js");
 }

@@ -1,3 +1,6 @@
+// Copyright (c) Fensak, LLC.
+// SPDX-License-Identifier: MPL-2.0
+
 interface Foo {
   bar: string;
   fizz: number;
