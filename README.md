@@ -18,7 +18,7 @@ no dynamicism in the failure. Reproducing a failing build locally is as easy as 
 retrying the build.
 
 
-## Why Senc over Pulumi or CDK?
+## Why SenC over Pulumi or CDK?
 
 Using TypeScript to provision and manage infrastructure is not a new concept. Existing tools such as
 [Pulumi](https://www.pulumi.com/) and [CDK](https://aws.amazon.com/cdk/) already give you the ability to write
@@ -43,10 +43,10 @@ were using Terraform Cloud (TFC), you would need to first compile your infrastru
 TFC deploy the compiled down code. If you have network dependent code in the TypeScript layer, then you would need to
 share your credentials with both the CI system running `cdktf synth`, and TFC, expanding the surface area.
 
-You can always restrict your team from using these features and have the same effect. However, in practice, bad
-practices always sneak their way in if there is a way to do it.
+You can always restrict your team from using these features and have the same effect. However, in practice, if there is
+a way to do something, it will always be used.
 
-Senc addresses both of these concerns by using an explicit hermetic compilation process. Senc does not directly
+SenC addresses both of these concerns by using an explicit hermetic compilation process. SenC does not directly
 provision infrastructure, delegating that task to the underlying infrastructure representation (either Terraform/OpenTF,
 or Kubernetes). This has a few advantages:
 
