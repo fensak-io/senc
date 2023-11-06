@@ -62,7 +62,11 @@ or Kubernetes). This has a few advantages:
 
 ## Why the name `senc`?
 
-SenC (pronounced seh-nn-see) comes from the word 仙 (sen) in Japanese, which itself is derived from the same character
-in Chinese, Xian. 仙 refers to an immortal wizard or sage that is living as a hermit, typically in the mountains. The
-`C` in `SenC` refers to compilation. Combining it together, this translates to a `hermit compiler`, which seems fitting
-for a hermetic compiler tool.
+SenC (pronounced seh-nn-see) comes from the word 仙人 (sen-nin) in Japanese, which itself is derived from
+仙 (Xian) in Chinese. 仙人 refers to an immortal wizard or sage that is living as a hermit, typically in the mountains.
+Note that the 人 character means "person" or "human."
+
+The `C` in `SenC` on the other hand means "compiler."
+
+Putting all this together, SenC can be translated to mean "compiler that is a hermit," which seems fitting for a
+hermetic compiler.
