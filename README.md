@@ -1,9 +1,9 @@
 # senc
 
-[SenC](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity) JSON compiler for
-[TypeScript](https://www.typescriptlang.org/) for generating Infrastructure as Code (IaC). Use a familiar, type-safe
-programming language to define and provision infrastructure, with protections that make your code easy to debug and
-test.
+[SenC](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity)
+[TypeScript](https://www.typescriptlang.org/) interpreter for generating Infrastructure as Code (IaC). Use a familiar,
+type-safe programming language to define and provision infrastructure, with protections that make your code easy to
+debug and test.
 
 
 ## What is Hermeticity?
