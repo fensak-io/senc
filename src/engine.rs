@@ -3,7 +3,7 @@
 
 use std::rc::Rc;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use deno_core::Snapshot;
 use deno_ast::MediaType;
 use deno_ast::ParseParams;
@@ -12,6 +12,36 @@ use deno_core::futures::FutureExt;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
+
+// A request to run a single JS/TS file through.
+pub struct RunRequest {
+  pub in_file: String,
+  pub out_file: String,
+}
+
+impl std::fmt::Display for RunRequest {
+  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    write!(f, "request to run {} to generate {}", self.in_file, self.out_file)
+  }
+}
+
+// Run the javascript or typescript file available at the given file path through the Deno runtime.
+pub async fn run_js(req: &RunRequest) -> Result<()> {
+  let main_module = deno_core::resolve_path(
+    req.in_file.as_str(),
+    std::env::current_dir()?.as_path(),
+  )?;
+  let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
+    module_loader: Some(Rc::new(TsModuleLoader)),
+    startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
+    ..Default::default()
+  });
+
+  let mod_id = js_runtime.load_main_module(&main_module, None).await?;
+  let result = js_runtime.mod_evaluate(mod_id);
+  js_runtime.run_event_loop(false).await?;
+  result.await?
+}
 
 // The TypeScript module loader.
 // This will check to see if the file is a TypeScript file, and run those through swc to transpile
@@ -86,32 +116,4 @@ impl deno_core::ModuleLoader for TsModuleLoader {
     }
     .boxed_local()
   }
-}
-
-// Run the javascript or typescript file available at the given file path through the Deno runtime.
-//
-// TODO
-// - Extract to separate file
-async fn run_js(file_path: &str) -> Result<()> {
-  let main_module = deno_core::resolve_path(file_path, std::env::current_dir()?.as_path())?;
-  let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
-      module_loader: Some(Rc::new(TsModuleLoader)),
-      startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
-      ..Default::default()
-  });
-
-  let mod_id = js_runtime.load_main_module(&main_module, None).await?;
-  let result = js_runtime.mod_evaluate(mod_id);
-  js_runtime.run_event_loop(false).await?;
-  result.await?
-}
-
-pub fn start_thread(file_path: &str) -> Result<()> {
-  let runtime = tokio::runtime::Builder::new_current_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-  runtime.block_on(run_js(file_path))
-      .with_context(|| format!("could not execute javascript file `{}`", file_path))?;
-  return Ok(());
 }
