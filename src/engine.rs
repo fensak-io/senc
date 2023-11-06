@@ -16,12 +16,12 @@ static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_
 // A request to run a single JS/TS file through.
 pub struct RunRequest {
   pub in_file: String,
-  pub out_file: String,
+  pub out_file_stem: String,
 }
 
 impl std::fmt::Display for RunRequest {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-    write!(f, "request to run {} to generate {}", self.in_file, self.out_file)
+    write!(f, "request to run {} to generate {}", self.in_file, self.out_file_stem)
   }
 }
 

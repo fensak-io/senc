@@ -1217,6 +1217,7 @@ dependencies = [
  "clap",
  "deno_ast",
  "deno_core",
+ "lazy_static",
  "regex",
  "tokio",
  "uuid",

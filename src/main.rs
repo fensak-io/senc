@@ -5,6 +5,9 @@ mod files;
 mod engine;
 mod threadpool;
 
+use std::path;
+use std::fs;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 
@@ -15,7 +18,25 @@ use clap::Parser;
 #[derive(Parser)]
 struct Cli {
   // The path to a .sen file or folder containing .sen files for generating IaC.
-  pub path: std::path::PathBuf,
+  pub path: path::PathBuf,
+
+  // The path to a directory where the IaC files should be generated.
+  #[clap(
+    short='o',
+    long,
+    default_value_t=String::from("generated"),
+    help="The path to a directory where the IaC files should be generated.",
+  )]
+  pub outdir: String,
+
+  // The root directory of the project.
+  #[clap(
+    short='r',
+    long,
+    default_value_t=String::from("."),
+    help="The root directory of the project.",
+  )]
+  pub projectroot: String,
 
   // The number of files to process in parallel. This corresponds to the number of threads to
   // spawn.
@@ -32,8 +53,11 @@ struct Cli {
 
 fn main() -> Result<()> {
   let args = Cli::parse();
+  let fpath = fs::canonicalize(&args.path).unwrap();
+  let outdir = fs::canonicalize(&args.outdir).unwrap();
+  let projectroot = fs::canonicalize(&args.projectroot).unwrap();
 
-  let requests = files::get_run_requests_from_path(args.path.as_path())
+  let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
     .with_context(|| format!("could not collect files to execute"))?;
 
   let pool = threadpool::ThreadPool::new(args.parallelism);

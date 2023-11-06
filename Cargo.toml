@@ -10,6 +10,7 @@ anyhow = "1.0.75"
 clap = { version = "4.0", features = ["derive"] }
 deno_ast = { version = "0.31.3", features = ["transpiling"] }
 deno_core = "0.225.0"
+lazy_static = "1.4.0"
 regex = "1.10.2"
 tokio = { version = "1.33.0", features = ["full"] }
 uuid = { version = "1.5.0", features = ["v4"] }
