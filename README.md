@@ -9,9 +9,9 @@ debug and test.
 ## What is Hermeticity?
 
 [Hermeticity](https://bazel.build/basics/hermeticity) is the concept of a fully isolated build system that ensures the
-output of a computation is always the same for the same input, regardless of the runtime environment. This was a concept
-that was first popularized with [Bazel](https://bazel.build/), where hermeticity allowed the build system to be super
-fast by enabling parallelism and aggressive caching in the build process.
+output of a computation is always the same for the same input, regardless of the runtime environment. This is a concept
+popularized in tools like [Bazel](https://bazel.build/) and [Jsonnet](https://jsonnet.org/), where hermeticity allowed
+these systems to be super fast by enabling parallelism and aggressive caching in the process.
 
 Hermeticity also has benefits in reproducibility, where it makes it really easy to analyze failing builds since there is
 no dynamicism in the failure. Reproducing a failing build locally is as easy as pulling down the input sources and
