@@ -1,9 +1,11 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
+mod files;
 mod engine;
 mod threadpool;
 
+use anyhow::{Context, Result};
 use clap::Parser;
 
 // senc is a hermetic TypeScript interpreter for generating Infrastructure as Code (IaC).
@@ -13,7 +15,7 @@ use clap::Parser;
 #[derive(Parser)]
 struct Cli {
   // The path to a .sen file or folder containing .sen files for generating IaC.
-  pub path: String,
+  pub path: std::path::PathBuf,
 
   // The number of files to process in parallel. This corresponds to the number of threads to
   // spawn.
@@ -28,9 +30,17 @@ struct Cli {
   pub parallelism: usize,
 }
 
-fn main() {
+fn main() -> Result<()> {
   let args = Cli::parse();
+
+  let requests = files::get_run_requests_from_path(args.path.as_path())
+    .with_context(|| format!("could not collect files to execute"))?;
+
   let pool = threadpool::ThreadPool::new(args.parallelism);
 
-  pool.execute(engine::RunRequest { in_file: args.path, out_file: "".to_string() });
+  for r in requests {
+    pool.execute(r);
+  }
+
+  return Ok(());
 }
