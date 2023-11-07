@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::rc::Rc;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
+use serde::{Serialize, Deserialize};
 use deno_ast::MediaType;
 use deno_ast::ParseParams;
 use deno_ast::SourceTextInfo;
 use deno_core::futures::FutureExt;
-use deno_core::Snapshot;
+use deno_core::*;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
@@ -17,6 +21,12 @@ static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_
 pub struct RunRequest {
     pub in_file: String,
     pub out_file_stem: String,
+}
+
+// The data to be written to disk, including the file extension to use.
+struct OutData {
+    out_ext: String,
+    data: String,
 }
 
 impl std::fmt::Display for RunRequest {
@@ -31,18 +41,75 @@ impl std::fmt::Display for RunRequest {
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
 pub async fn run_js(req: &RunRequest) -> Result<()> {
-    let main_module =
-        deno_core::resolve_path(req.in_file.as_str(), std::env::current_dir()?.as_path())?;
-    let mut js_runtime = deno_core::JsRuntime::new(deno_core::RuntimeOptions {
+    let mut js_runtime = JsRuntime::new(RuntimeOptions {
         module_loader: Some(Rc::new(TsModuleLoader)),
         startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
         ..Default::default()
     });
 
+    let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
+    let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
+    let result = js_runtime.call_and_await(&main_fn).await?;
+    let out_data = load_result::<serde_json::Value>(&mut js_runtime, result).unwrap();
+    return write_data(&req.out_file_stem, &out_data);
+}
+
+async fn load_main_module(
+    js_runtime: &mut JsRuntime,
+    file_path: &str,
+) -> Result<usize> {
+    let main_module =
+        resolve_path(file_path, std::env::current_dir()?.as_path())?;
     let mod_id = js_runtime.load_main_module(&main_module, None).await?;
     let result = js_runtime.mod_evaluate(mod_id);
     js_runtime.run_event_loop(false).await?;
-    result.await?
+    result.await?.unwrap();
+    return Ok(mod_id);
+}
+
+fn load_main_fn(
+    js_runtime: &mut JsRuntime,
+    mod_id: usize,
+) -> Result<v8::Global<v8::Function>> {
+    let ns = js_runtime.get_module_namespace(mod_id).unwrap();
+    let mut scope = js_runtime.handle_scope();
+    let main_fn_key = v8::String::new(&mut scope, "main").unwrap();
+    let main_fn_local: v8::Local<v8::Function> = ns
+        .open(&mut scope)
+        .get(&mut scope, main_fn_key.into())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let main_fn = v8::Global::new(&mut scope, main_fn_local);
+    return Ok(main_fn);
+}
+
+fn load_result<'de, T>(
+    js_runtime: &mut JsRuntime,
+    result: v8::Global<v8::Value>,
+) -> Result<OutData>
+where
+    T: Serialize + Deserialize<'de>
+{
+    let mut scope = &mut js_runtime.handle_scope();
+    let result_local = v8::Local::new(&mut scope, result);
+    let deserialized_result: T =
+        serde_v8::from_v8(&mut scope, result_local).unwrap();
+    let deserialized_result_str = serde_json::to_string(&deserialized_result).unwrap();
+    return Ok(OutData { out_ext: ".json".to_string(), data: deserialized_result_str.to_string() });
+}
+
+fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
+    let mut out_file_path_str = out_file_stem.to_owned();
+    out_file_path_str.push_str(&data.out_ext);
+
+    let out_file_path = PathBuf::from(out_file_path_str);
+    let out_file_dir = out_file_path.parent().unwrap();
+    fs::create_dir_all(out_file_dir)?;
+    let mut f = fs::File::create(out_file_path)?;
+    f.write_all(data.data.as_bytes())?;
+
+    return Ok(());
 }
 
 // The TypeScript module loader.
@@ -53,22 +120,22 @@ pub async fn run_js(req: &RunRequest) -> Result<()> {
 // - Implement caching so only files that changed run through transpile.
 struct TsModuleLoader;
 
-impl deno_core::ModuleLoader for TsModuleLoader {
+impl ModuleLoader for TsModuleLoader {
     fn resolve(
         &self,
         specifier: &str,
         referrer: &str,
-        _kind: deno_core::ResolutionKind,
-    ) -> Result<deno_core::ModuleSpecifier, deno_core::error::AnyError> {
-        deno_core::resolve_import(specifier, referrer).map_err(|e| e.into())
+        _kind: ResolutionKind,
+    ) -> Result<ModuleSpecifier, error::AnyError> {
+        resolve_import(specifier, referrer).map_err(|e| e.into())
     }
 
     fn load(
         &self,
-        module_specifier: &deno_core::ModuleSpecifier,
-        _maybe_referrer: Option<&deno_core::ModuleSpecifier>,
+        module_specifier: &ModuleSpecifier,
+        _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dyn_import: bool,
-    ) -> std::pin::Pin<Box<deno_core::ModuleSourceFuture>> {
+    ) -> std::pin::Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         async move {
             let path = module_specifier.to_file_path().unwrap();
@@ -78,17 +145,17 @@ impl deno_core::ModuleLoader for TsModuleLoader {
             let media_type = MediaType::from_path(&path);
             let (module_type, should_transpile) = match media_type {
                 MediaType::JavaScript | MediaType::Mjs | MediaType::Cjs => {
-                    (deno_core::ModuleType::JavaScript, false)
+                    (ModuleType::JavaScript, false)
                 }
-                MediaType::Jsx => (deno_core::ModuleType::JavaScript, true),
+                MediaType::Jsx => (ModuleType::JavaScript, true),
                 MediaType::TypeScript
                 | MediaType::Mts
                 | MediaType::Cts
                 | MediaType::Dts
                 | MediaType::Dmts
                 | MediaType::Dcts
-                | MediaType::Tsx => (deno_core::ModuleType::JavaScript, true),
-                MediaType::Json => (deno_core::ModuleType::Json, false),
+                | MediaType::Tsx => (ModuleType::JavaScript, true),
+                MediaType::Json => (ModuleType::Json, false),
                 _ => panic!("Unknown extension {:?}", path.extension()),
             };
 
@@ -109,9 +176,9 @@ impl deno_core::ModuleLoader for TsModuleLoader {
             };
 
             // Load and return module.
-            let module = deno_core::ModuleSource::new(
+            let module = ModuleSource::new(
                 module_type,
-                deno_core::FastString::from(code),
+                FastString::from(code),
                 &module_specifier,
             );
             Ok(module)

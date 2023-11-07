@@ -10,3 +10,7 @@ const foo: Foo = {
   fizz: 42,
 };
 console.log(foo);
+
+export function main() {
+  return { foo };
+}

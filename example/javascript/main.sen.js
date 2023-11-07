@@ -3,3 +3,7 @@
 
 console.log("Hello world");
 console.error("Boom!");
+
+export function main() {
+  return { cfg: true };
+}

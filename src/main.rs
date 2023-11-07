@@ -54,8 +54,15 @@ struct Cli {
 fn main() -> Result<()> {
     let args = Cli::parse();
     let fpath = fs::canonicalize(&args.path).unwrap();
-    let outdir = fs::canonicalize(&args.outdir).unwrap();
     let projectroot = fs::canonicalize(&args.projectroot).unwrap();
+
+    let outdir = match fs::canonicalize(&args.outdir) {
+        Ok(d) => { d },
+        Err(_e) => {
+            fs::create_dir_all(&args.outdir)?;
+            fs::canonicalize(&args.outdir).unwrap()
+        },
+    };
 
     let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
         .with_context(|| format!("could not collect files to execute"))?;
