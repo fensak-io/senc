@@ -12,6 +12,7 @@ deno_ast = { version = "0.31.3", features = ["transpiling"] }
 deno_core = "0.225.0"
 lazy_static = "1.4.0"
 regex = "1.10.2"
+serde_yaml = "0.9.27"
 tokio = { version = "1.33.0", features = ["full"] }
 uuid = { version = "1.5.0", features = ["v4"] }
 walkdir = "2.4.0"

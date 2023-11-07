@@ -18,7 +18,7 @@ extension!(
   builtins,
   // TODO
   // Make dynamic so it uses all files in builtins
-  js = [ dir "src/builtins", "console.js" ],
+  js = [ dir "src/builtins", "console.js", "senc.js" ],
   docs = "Built in functions for senc.",
 );
 
@@ -41,4 +41,5 @@ fn main() {
     // TODO
     // Make dynamic so it uses all files in builtins
     println!("cargo:rerun-if-changed=src/builtins/console.js");
+    println!("cargo:rerun-if-changed=src/builtins/senc.js");
 }

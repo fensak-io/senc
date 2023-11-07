@@ -6,8 +6,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
-use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
 use deno_ast::MediaType;
 use deno_ast::ParseParams;
 use deno_ast::SourceTextInfo;
@@ -27,6 +26,12 @@ pub struct RunRequest {
 struct OutData {
     out_ext: String,
     data: String,
+}
+
+// The output types supported
+enum OutputType {
+    JSON,
+    YAML,
 }
 
 impl std::fmt::Display for RunRequest {
@@ -50,7 +55,7 @@ pub async fn run_js(req: &RunRequest) -> Result<()> {
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
     let result = js_runtime.call_and_await(&main_fn).await?;
-    let out_data = load_result::<serde_json::Value>(&mut js_runtime, result).unwrap();
+    let out_data = load_result(&mut js_runtime, result).unwrap();
     return write_data(&req.out_file_stem, &out_data);
 }
 
@@ -84,19 +89,56 @@ fn load_main_fn(
     return Ok(main_fn);
 }
 
-fn load_result<'de, T>(
+fn load_result(
     js_runtime: &mut JsRuntime,
     result: v8::Global<v8::Value>,
-) -> Result<OutData>
-where
-    T: Serialize + Deserialize<'de>
-{
+) -> Result<OutData> {
     let mut scope = &mut js_runtime.handle_scope();
-    let result_local = v8::Local::new(&mut scope, result);
-    let deserialized_result: T =
-        serde_v8::from_v8(&mut scope, result_local).unwrap();
-    let deserialized_result_str = serde_json::to_string(&deserialized_result).unwrap();
-    return Ok(OutData { out_ext: ".json".to_string(), data: deserialized_result_str.to_string() });
+    let mut result_local = v8::Local::new(&mut scope, result);
+
+    let mut out_ext = ".json".to_string();
+    let mut out_type = OutputType::JSON;
+
+    // Determine if the raw JS object from the runtime is an out data object.
+    let result_obj: v8::Local<v8::Object> = result_local.try_into().unwrap();
+    let is_senc_out_data_key: v8::Local<v8::Value> =
+        v8::String::new(&mut scope, "__is_senc_out_data").unwrap().into();
+    if result_obj.has(&mut scope, is_senc_out_data_key).unwrap() {
+        let out_type_key: v8::Local<v8::Value> =
+            v8::String::new(&mut scope, "out_type").unwrap().into();
+        let out_type_local: v8::Local<v8::String> =
+            result_obj.get(&mut scope, out_type_key).unwrap().try_into().unwrap();
+        let out_type_str: &str = &out_type_local.to_rust_string_lossy(&mut scope);
+        match out_type_str {
+            "yaml" => { out_type = OutputType::YAML; },
+            "" | "json" => {},  // Use default
+            s => { return Err(anyhow!("out_type {s} in OutData object is not supported")) },
+        }
+
+        let out_ext_key: v8::Local<v8::Value> =
+            v8::String::new(&mut scope, "out_ext").unwrap().into();
+        let out_ext_local: v8::Local<v8::String> =
+            result_obj.get(&mut scope, out_ext_key).unwrap().try_into().unwrap();
+        out_ext = out_ext_local.to_rust_string_lossy(&mut scope);
+
+        let out_data_key: v8::Local<v8::Value> =
+            v8::String::new(&mut scope, "data").unwrap().into();
+        result_local = result_obj.get(&mut scope, out_data_key).unwrap().try_into().unwrap();
+    }
+
+    let data = match out_type {
+        OutputType::JSON => {
+            let deserialized_result =
+                serde_v8::from_v8::<serde_json::Value>(&mut scope, result_local).unwrap();
+            serde_json::to_string(&deserialized_result).unwrap().to_string()
+        },
+        OutputType::YAML => {
+            let deserialized_result =
+                serde_v8::from_v8::<serde_yaml::Value>(&mut scope, result_local).unwrap();
+            serde_yaml::to_string(&deserialized_result).unwrap().to_string()
+        },
+    };
+    return Ok(OutData { out_ext, data });
 }
 
 fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
