@@ -52,10 +52,16 @@ or Kubernetes). This has a few advantages:
 
 - Because the infrastructure provisioning step is explicit, it's very easy to trace down if a bug is from the Terraform
   code or TypeScript code. You can either introspect the generated code, or try running it directly yourself.
-- `senc` is a hermetic runtime, and thus there is no way to write code that depends on the environment. This means that
-  you can easily troubleshoot failing builds by rerunning locally with the same source.
-- The hermetic runtime also ensures you can run the compilation step without any credentials. Only share the credentials
-  with your provisioning pipeline.
+- `senc` is a hermetic runtime, and thus there is no way to write code that depends on the environment. This means that:
+    - You can easily troubleshoot failing builds by rerunning locally with the same source.
+    - You can run the compilation step without any credentials. Only share the credentials with your provisioning
+      pipeline.
+    - Testing can be done solely through introspection of the generated code. A typical testing pipeline would:
+        1. Run `senc` to generate the IaC.
+        1. Run validation to ensure the generated code is sound (e.g., `terraform validate`).
+        1. Run a contract checker like [OPA](https://www.openpolicyagent.org/) or [CUE](https://cuelang.org/) to ensure
+           the specific settings are set.
+
 - Since `senc` doesn't handle the provisioning aspect, you can natively integrate with any of the Terraform runtimes,
   such as Terraform Cloud, Spacelift, env0, or Terraform/OpenTF workflows on GitHub Actions.
 
