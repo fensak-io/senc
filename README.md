@@ -6,6 +6,12 @@ type-safe programming language to define and provision infrastructure, with prot
 debug and test.
 
 
+## Technology
+
+`senc` is built in [Rust](https://www.rust-lang.org/), and embeds [the Deno runtime](https://deno.com) for the
+TypeScript runtime using the [deno_core crate](https://docs.rs/crate/deno_core/latest).
+
+
 ## What is Hermeticity?
 
 [Hermeticity](https://bazel.build/basics/hermeticity) is the concept of a fully isolated build system that ensures the
@@ -16,6 +22,10 @@ these systems to be super fast by enabling parallelism and aggressive caching in
 Hermeticity also has benefits in reproducibility, where it makes it really easy to analyze failing builds since there is
 no dynamicism in the failure. Reproducing a failing build locally is as easy as pulling down the input sources and
 retrying the build.
+
+`senc` is an almost-hermetic runtime for TypeScript. It is "almost" because it exposes some limited access to the
+environment, namely access to the file system (for code modularization) and stdout/stderr. However, it does not give
+any other environmental access (e.g., network calls, environment variables, etc).
 
 
 ## Why `senc` over Pulumi or CDK?
@@ -64,6 +74,25 @@ or Kubernetes). This has a few advantages:
 
 - Since `senc` doesn't handle the provisioning aspect, you can natively integrate with any of the Terraform runtimes,
   such as Terraform Cloud, Spacelift, env0, or Terraform/OpenTF workflows on GitHub Actions.
+
+
+## Why `senc` over Terraform / OpenTofu?
+
+`senc` allows you to use TypeScript to provision and manage infrastructure. Although it does not give you the full range
+of power behind the general purpose programming language (due to the hermeticity), it does give you access to the
+expressiveness of the underlying programming language. This should be much more familiar to anyone who has experience
+with general purpose programming languages than a DSL like HCL.
+
+`senc` does not limit you from features available to Terraform/OpenTofu. Since `senc` is a code generator at heart, as
+long as you generate the necessary Terrraform/OpenTofu code, you can use any feature or construct available.
+
+However, by using a higher level language to generate the underlying Terraform/OpenTofu code, it allows you to
+workaround certain limitations of HCL, most notably:
+- You can interpolate constructs that can not be dynamically interpolated in HCL (e.g.,
+  [lifecycle](https://developer.hashicorp.com/terraform/language/meta-arguments/lifecycle#literal-values-only) and
+  [backend](https://developer.hashicorp.com/terraform/language/settings/backends/configuration)).
+- You can reuse blocks that typically can't be reused (e.g.,
+  [provider](https://developer.hashicorp.com/terraform/language/modules/develop/providers)).
 
 
 ## Why the name `senc`?
