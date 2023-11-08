@@ -7,6 +7,8 @@ mod threadpool;
 
 use std::fs;
 use std::path;
+use std::process;
+use std::sync::{atomic, Arc};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -55,23 +57,38 @@ fn main() -> Result<()> {
     let args = Cli::parse();
     let fpath = fs::canonicalize(&args.path).unwrap();
     let projectroot = fs::canonicalize(&args.projectroot).unwrap();
-
     let outdir = match fs::canonicalize(&args.outdir) {
-        Ok(d) => { d },
+        Ok(d) => d,
         Err(_e) => {
             fs::create_dir_all(&args.outdir)?;
             fs::canonicalize(&args.outdir).unwrap()
-        },
+        }
     };
+
+    engine::init_v8();
 
     let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
         .with_context(|| format!("could not collect files to execute"))?;
 
-    let pool = threadpool::ThreadPool::new(args.parallelism);
+    let has_quit = Arc::new(atomic::AtomicBool::new(false));
+    let mut pool = threadpool::ThreadPool::new(args.parallelism, has_quit.clone());
+    let hq = has_quit.clone();
+    ctrlc::set_handler(move || {
+        if hq.load(atomic::Ordering::SeqCst) {
+            eprintln!("Received second SIGINT. Shutting down immediately.");
+            process::exit(1);
+        }
+
+        eprintln!("Shutting down gracefully...");
+        hq.store(true, atomic::Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     for r in requests {
-        pool.execute(r);
+        pool.run(r);
     }
+    pool.wait()
+        .with_context(|| format!("could not run all files"))?;
 
     return Ok(());
 }

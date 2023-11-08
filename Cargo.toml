@@ -8,6 +8,7 @@ build = "build.rs"
 [dependencies]
 anyhow = "1.0.75"
 clap = { version = "4.0", features = ["derive"] }
+ctrlc = "3.4.1"
 deno_ast = { version = "0.31.3", features = ["transpiling"] }
 deno_core = "0.225.0"
 lazy_static = "1.4.0"
