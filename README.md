@@ -1,6 +1,6 @@
 # senc
 
-[SenC](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity)
+[senc](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity)
 [TypeScript](https://www.typescriptlang.org/) interpreter for generating Infrastructure as Code (IaC). Use a familiar,
 type-safe programming language to define and provision infrastructure, with protections that make your code easy to
 debug and test.
@@ -18,7 +18,7 @@ no dynamicism in the failure. Reproducing a failing build locally is as easy as 
 retrying the build.
 
 
-## Why SenC over Pulumi or CDK?
+## Why `senc` over Pulumi or CDK?
 
 Using TypeScript to provision and manage infrastructure is not a new concept. Existing tools such as
 [Pulumi](https://www.pulumi.com/) and [CDK](https://aws.amazon.com/cdk/) already give you the ability to write
@@ -46,7 +46,7 @@ share your credentials with both the CI system running `cdktf synth`, and TFC, e
 You can always restrict your team from using these features and have the same effect. However, in practice, if there is
 a way to do something, it will always be used.
 
-SenC addresses both of these concerns by using an explicit hermetic compilation process. SenC does not directly
+`senc` addresses both of these concerns by using an explicit hermetic compilation process. `senc` does not directly
 provision infrastructure, delegating that task to the underlying infrastructure representation (either Terraform/OpenTF,
 or Kubernetes). This has a few advantages:
 
@@ -62,11 +62,11 @@ or Kubernetes). This has a few advantages:
 
 ## Why the name `senc`?
 
-SenC (pronounced seh-nn-see) comes from the word 仙人 (sen-nin) in Japanese, which itself is derived from
+`senc` (pronounced seh-nn-see) comes from the word 仙人 (sen-nin) in Japanese, which itself is derived from
 仙 (Xian) in Chinese. 仙人 refers to an immortal wizard or sage that is living as a hermit, typically in the mountains.
 Note that the 人 character means "person" or "human."
 
-The `C` in `SenC` on the other hand means "compiler."
+The `c` in `senc` on the other hand means "compiler."
 
-Putting all this together, SenC can be translated to mean "compiler that is a hermit," which seems fitting for a
+Putting all this together, `senc` can be translated to mean "compiler that is a hermit," which seems fitting for a
 hermetic compiler.
