@@ -1,2 +1,7 @@
 /target
 /generated
+
+# NPM related files are currently disabled since we only use them in CI
+/package.json
+/package-lock.json
+/node_modules

@@ -1,0 +1,36 @@
+version: 2.1
+
+workflows:
+  release:
+    jobs:
+      - release:
+          context: 'Fensak CI/CD'
+          filters:
+            branches:
+              only:
+                - main
+
+
+jobs:
+  release:
+    docker:
+      - image: cimg/node:lts
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
+      - checkout
+      - run:
+          name: download github-app-token CLI
+          command: |
+            curl -sLO https://github.com/fensak-io/github-app-token/releases/download/v0.0.1/github-app-token_linux_amd64.tar.gz
+            tar -xvf github-app-token_linux_amd64.tar.gz
+          working_directory: /tmp
+      - run:
+          name: semantic-release
+          command: |
+            export GITHUB_APP_PRIVATE_KEY="$(echo -n "$GITHUB_APP_PRIVATE_KEY_B64" | base64 -d)"
+            export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
+
+            npm install semantic-release-replace-plugin @semantic-release/git
+            npx -y semantic-release@^22.0.5
