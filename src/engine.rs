@@ -3,15 +3,13 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path;
 use std::rc::Rc;
 
 use anyhow::{anyhow, Result};
-use deno_ast::MediaType;
-use deno_ast::ParseParams;
-use deno_ast::SourceTextInfo;
-use deno_core::futures::FutureExt;
 use deno_core::*;
+
+use crate::module_loader;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
@@ -52,9 +50,11 @@ pub fn init_v8() {
 }
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
-pub async fn run_js(req: &RunRequest) -> Result<()> {
+pub async fn run_js(node_modules_dir: Option<path::PathBuf>, req: &RunRequest) -> Result<()> {
     let mut js_runtime = JsRuntime::new(RuntimeOptions {
-        module_loader: Some(Rc::new(TsModuleLoader)),
+        module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
+            node_modules_dir,
+        ))),
         startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
         ..Default::default()
     });
@@ -160,82 +160,11 @@ fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
     let mut out_file_path_str = out_file_stem.to_owned();
     out_file_path_str.push_str(&data.out_ext);
 
-    let out_file_path = PathBuf::from(out_file_path_str);
+    let out_file_path = path::PathBuf::from(out_file_path_str);
     let out_file_dir = out_file_path.parent().unwrap();
     fs::create_dir_all(out_file_dir)?;
     let mut f = fs::File::create(out_file_path)?;
     f.write_all(data.data.as_bytes())?;
 
     return Ok(());
-}
-
-// The TypeScript module loader.
-// This will check to see if the file is a TypeScript file, and run those through swc to transpile
-// to JS.
-//
-// TODO:
-// - Implement caching so only files that changed run through transpile.
-struct TsModuleLoader;
-
-impl ModuleLoader for TsModuleLoader {
-    fn resolve(
-        &self,
-        specifier: &str,
-        referrer: &str,
-        _kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, error::AnyError> {
-        resolve_import(specifier, referrer).map_err(|e| e.into())
-    }
-
-    fn load(
-        &self,
-        module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<&ModuleSpecifier>,
-        _is_dyn_import: bool,
-    ) -> std::pin::Pin<Box<ModuleSourceFuture>> {
-        let module_specifier = module_specifier.clone();
-        async move {
-            let path = module_specifier.to_file_path().unwrap();
-
-            // Determine what the MediaType is (this is done based on the file
-            // extension) and whether transpiling is required.
-            let media_type = MediaType::from_path(&path);
-            let (module_type, should_transpile) = match media_type {
-                MediaType::JavaScript | MediaType::Mjs | MediaType::Cjs => {
-                    (ModuleType::JavaScript, false)
-                }
-                MediaType::Jsx => (ModuleType::JavaScript, true),
-                MediaType::TypeScript
-                | MediaType::Mts
-                | MediaType::Cts
-                | MediaType::Dts
-                | MediaType::Dmts
-                | MediaType::Dcts
-                | MediaType::Tsx => (ModuleType::JavaScript, true),
-                MediaType::Json => (ModuleType::Json, false),
-                _ => panic!("Unknown extension {:?}", path.extension()),
-            };
-
-            // Read the file, transpile if necessary.
-            let code = std::fs::read_to_string(&path)?;
-            let code = if should_transpile {
-                let parsed = deno_ast::parse_module(ParseParams {
-                    specifier: module_specifier.to_string(),
-                    text_info: SourceTextInfo::from_string(code),
-                    media_type,
-                    capture_tokens: false,
-                    scope_analysis: false,
-                    maybe_syntax: None,
-                })?;
-                parsed.transpile(&Default::default())?.text
-            } else {
-                code
-            };
-
-            // Load and return module.
-            let module = ModuleSource::new(module_type, FastString::from(code), &module_specifier);
-            Ok(module)
-        }
-        .boxed_local()
-    }
 }

@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 use crate::engine;
 
 lazy_static! {
-    static ref FIND_SEN_RE: Regex = Regex::new(r".+\.sen\.(js|ts)$").unwrap();
+    static ref FIND_SEN_RE: Regex = Regex::new(r".+\.sen\.(m?js|ts)$").unwrap();
 }
 
 // Collects the list of files that need to be run through Deno by senc.
@@ -120,4 +120,20 @@ fn get_out_file_stem(
     return Ok(String::from(
         out_file_dir.join(fname_stem).to_string_lossy(),
     ));
+}
+
+pub fn find_node_modules_dir(projectroot: &path::Path) -> Result<path::PathBuf> {
+    let mut curpath = Some(projectroot);
+    while curpath != None && !is_node_modules(curpath.unwrap()) {
+        curpath = curpath.unwrap().parent();
+    }
+    if curpath == None {
+        return Err(anyhow!("could not find node_modules directory in parent"));
+    }
+    return Ok(path::PathBuf::from(curpath.unwrap().join("node_modules")));
+}
+
+fn is_node_modules(p: &path::Path) -> bool {
+    let maybe_node_modules = p.join("node_modules");
+    maybe_node_modules.exists() && maybe_node_modules.is_dir()
 }

@@ -3,6 +3,7 @@
 
 mod engine;
 mod files;
+mod module_loader;
 mod threadpool;
 
 use std::fs;
@@ -65,13 +66,23 @@ fn main() -> Result<()> {
         }
     };
 
+    // Find the node_modules directory, if it exists. Otherwise, set to None.
+    let node_modules_dir = match files::find_node_modules_dir(projectroot.as_path()) {
+        Err(e) => {
+            eprintln!("WARNING: {}", e);
+            None
+        }
+        Ok(p) => Some(p),
+    };
+
     engine::init_v8();
 
     let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
         .with_context(|| format!("could not collect files to execute"))?;
 
     let has_quit = Arc::new(atomic::AtomicBool::new(false));
-    let mut pool = threadpool::ThreadPool::new(args.parallelism, has_quit.clone());
+    let mut pool =
+        threadpool::ThreadPool::new(node_modules_dir, args.parallelism, has_quit.clone());
     let hq = has_quit.clone();
     ctrlc::set_handler(move || {
         if hq.load(atomic::Ordering::SeqCst) {

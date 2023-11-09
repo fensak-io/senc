@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::collections::HashSet;
+use std::path;
 use std::sync::{atomic, mpsc, Arc, Mutex};
 use std::thread;
 use std::time;
@@ -29,7 +30,11 @@ impl ThreadPool {
     //
     // |has_quit| is an Arc<AtomicBool> indicating whether the process has quit and is used to
     // gracefully shutdown the generation routine.
-    pub fn new(size: usize, has_quit: Arc<atomic::AtomicBool>) -> ThreadPool {
+    pub fn new(
+        node_modules_dir: Option<path::PathBuf>,
+        size: usize,
+        has_quit: Arc<atomic::AtomicBool>,
+    ) -> ThreadPool {
         let thread_count = if size == 0 {
             thread::available_parallelism().unwrap().get()
         } else {
@@ -45,7 +50,11 @@ impl ThreadPool {
         let mut workers = Vec::with_capacity(thread_count);
         for _ in 0..thread_count {
             let result_sender_copy = result_sender.clone();
-            workers.push(Worker::new(task_mreceiver.clone(), result_sender_copy));
+            workers.push(Worker::new(
+                node_modules_dir.clone(),
+                task_mreceiver.clone(),
+                result_sender_copy,
+            ));
         }
 
         ThreadPool {
@@ -131,6 +140,7 @@ impl Worker {
     // On construction, spawn the thread for the worker which watches for incoming tasks on the
     // task_receiver channel.
     fn new(
+        node_modules_dir: Option<path::PathBuf>,
         task_receiver: Arc<Mutex<mpsc::Receiver<Task>>>,
         result_sender: mpsc::Sender<Uuid>,
     ) -> Worker {
@@ -152,7 +162,9 @@ impl Worker {
                         // implement proper project logging
                         eprintln!("[{id}] Worker got request to run {}.", task.req);
 
-                        if let Err(e) = runtime.block_on(engine::run_js(&task.req)) {
+                        if let Err(e) =
+                            runtime.block_on(engine::run_js(node_modules_dir.clone(), &task.req))
+                        {
                             eprintln!(
                                 "[{id}] could not execute javascript file `{}`: {e}",
                                 task.req.in_file
