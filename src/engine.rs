@@ -22,7 +22,7 @@ pub struct RunRequest {
 }
 
 // The data to be written to disk, including the file extension to use.
-struct OutData {
+pub struct OutData {
     out_ext: String,
     data: String,
 }
@@ -50,14 +50,21 @@ pub fn init_v8() {
     JsRuntime::init_platform(Some(platform));
 }
 
+pub async fn run_js_and_write(
+    node_modules_dir: Option<path::PathBuf>,
+    req: &RunRequest,
+) -> Result<()> {
+    let out_data = run_js(node_modules_dir, req).await?;
+    return write_data(&req.out_file_stem, &out_data);
+}
+
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
-pub async fn run_js(node_modules_dir: Option<path::PathBuf>, req: &RunRequest) -> Result<()> {
+async fn run_js(node_modules_dir: Option<path::PathBuf>, req: &RunRequest) -> Result<OutData> {
     let mut js_runtime = new_runtime(node_modules_dir);
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
     let result = js_runtime.call_and_await(&main_fn).await?;
-    let out_data = load_result(&mut js_runtime, result).unwrap();
-    return write_data(&req.out_file_stem, &out_data);
+    return load_result(&mut js_runtime, result);
 }
 
 fn new_runtime(node_modules_dir: Option<path::PathBuf>) -> JsRuntime {
@@ -187,4 +194,71 @@ fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
     f.write_all(data.data.as_bytes())?;
 
     return Ok(());
+}
+
+// Test cases
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static EXPECTED_SIMPLE_OUTPUT_JSON: &str =
+        "{\"foo\":\"bar\",\"fizz\":42,\"obj\":{\"msg\":\"hello world\"}}";
+    static EXPECTED_LODASH_OUTPUT_JSON: &str = "{\"foo\":\"bar\",\"cfg\":false}";
+
+    #[tokio::test]
+    async fn test_engine_runs_js() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_SIMPLE_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("simple.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
+        assert_eq!(actual_output, expected_output);
+    }
+
+    #[tokio::test]
+    async fn test_engine_runs_ts() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_SIMPLE_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("simple.ts");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
+        assert_eq!(actual_output, expected_output);
+    }
+
+    #[tokio::test]
+    async fn test_engine_runs_code_with_node_modules() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_LODASH_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("with_lodash.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
+        assert_eq!(actual_output, expected_output);
+    }
+
+    fn get_node_modules_dir() -> Option<path::PathBuf> {
+        Some(get_fixture_path("node_modules"))
+    }
+
+    fn get_fixture_path(relpath: &str) -> path::PathBuf {
+        let mut p = path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("tests/fixtures");
+        p.push(relpath);
+        return p;
+    }
 }
