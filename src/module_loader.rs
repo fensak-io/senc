@@ -90,7 +90,7 @@ impl ModuleLoader for TsModuleLoader {
             let (module_type, should_transpile) = match media_type {
                 MediaType::JavaScript | MediaType::Mjs | MediaType::Cjs => {
                     (ModuleType::JavaScript, false)
-                },
+                }
                 MediaType::Jsx => (ModuleType::JavaScript, true),
                 MediaType::TypeScript
                 | MediaType::Mts
@@ -127,7 +127,10 @@ impl ModuleLoader for TsModuleLoader {
     }
 }
 
-fn find_node_module_specifier(node_modules_dir: &path::PathBuf, specifier: &str) -> AnyhowResult<path::PathBuf> {
+fn find_node_module_specifier(
+    node_modules_dir: &path::PathBuf,
+    specifier: &str,
+) -> AnyhowResult<path::PathBuf> {
     let specifier_path = node_modules_dir.join(path::PathBuf::from(specifier));
     if specifier_path.is_file() {
         return Ok(fs::canonicalize(specifier_path).unwrap());
@@ -135,7 +138,10 @@ fn find_node_module_specifier(node_modules_dir: &path::PathBuf, specifier: &str)
 
     let package_json_path = specifier_path.join("package.json");
     if !package_json_path.is_file() {
-        return Err(anyhow!("node package {} does not have a package.json file", specifier));
+        return Err(anyhow!(
+            "node package {} does not have a package.json file",
+            specifier
+        ));
     }
 
     let package_json_raw = std::fs::read_to_string(package_json_path)?;
