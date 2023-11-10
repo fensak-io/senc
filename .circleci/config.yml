@@ -3,22 +3,23 @@ version: 2.1
 workflows:
   lint-test-release:
     jobs:
-      - lint
-      - test
+      - lint-test
       - release:
           context: 'Fensak CI/CD'
           requires:
-            - lint
-            - test
+            - lint-test
           filters:
             branches:
               only:
                 - main
 
 jobs:
-  lint:
+  lint-test:
     docker:
-      - image: cimg/rust:1.73
+      - image: cimg/rust:1.73-node
+    # We use arm instances for linting and testing because of
+    # https://github.com/denoland/deno_core/issues/217
+    resource_class: arm.large
     steps:
       - add_ssh_keys:
           fingerprints:
@@ -30,15 +31,18 @@ jobs:
       - run:
           name: cargo build check
           command: cargo check
-  test:
-    docker:
-      - image: cimg/rust:1.73
-    steps:
-      - add_ssh_keys:
-          fingerprints:
-            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
-      - checkout
-      # TODO: add cargo test
+      - run:
+          name: install pnpm
+          command: |
+            sudo corepack enable
+            sudo corepack prepare pnpm@latest-8 --activate
+      - run:
+          name: install test script dependencies
+          command: pnpm install
+          working_directory: ./tests/fixtures
+      - run:
+          name: cargo test
+          command: cargo test
 
   release:
     docker:

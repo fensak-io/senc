@@ -162,9 +162,10 @@ impl Worker {
                         trace!("[{id}] Worker got request to run {}.", task.req);
                         debug!("executing {}", task.req.in_file);
 
-                        if let Err(e) =
-                            runtime.block_on(engine::run_js(node_modules_dir.clone(), &task.req))
-                        {
+                        if let Err(e) = runtime.block_on(engine::run_js_and_write(
+                            node_modules_dir.clone(),
+                            &task.req,
+                        )) {
                             error!(
                                 "could not execute javascript file `{}`: {e}",
                                 task.req.in_file
