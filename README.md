@@ -57,7 +57,7 @@ You can always restrict your team from using these features and have the same ef
 a way to do something, it will always be used.
 
 `senc` addresses both of these concerns by using an explicit hermetic compilation process. `senc` does not directly
-provision infrastructure, delegating that task to the underlying infrastructure representation (either Terraform/OpenTF,
+provision infrastructure, delegating that task to the underlying infrastructure representation (either Terraform/OpenTofu,
 or Kubernetes). This has a few advantages:
 
 - Because the infrastructure provisioning step is explicit, it's very easy to trace down if a bug is from the Terraform
@@ -73,7 +73,7 @@ or Kubernetes). This has a few advantages:
            the specific settings are set.
 
 - Since `senc` doesn't handle the provisioning aspect, you can natively integrate with any of the Terraform runtimes,
-  such as Terraform Cloud, Spacelift, env0, or Terraform/OpenTF workflows on GitHub Actions.
+  such as Terraform Cloud, Spacelift, env0, or Terraform/OpenTofu workflows on GitHub Actions.
 
 
 ## Why `senc` over Terraform / OpenTofu?
