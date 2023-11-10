@@ -10,6 +10,7 @@ use deno_ast::ParseParams;
 use deno_ast::SourceTextInfo;
 use deno_core::futures::FutureExt;
 use deno_core::*;
+use log::*;
 
 // The TypeScript module loader.
 // This will check to see if the file is a TypeScript file, and run those through swc to transpile
@@ -38,7 +39,7 @@ impl TsModuleLoader {
     ) -> Result<ModuleSpecifier, error::AnyError> {
         let node_modules_path = match &self.node_modules_dir {
             None => {
-                eprintln!("no node modules dir");
+                error!("no node modules dir");
                 return original_result;
             }
             Some(p) => p,

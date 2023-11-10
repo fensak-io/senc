@@ -8,6 +8,7 @@ use std::thread;
 use std::time;
 
 use anyhow::{anyhow, Result};
+use log::*;
 use uuid::Uuid;
 
 use crate::engine;
@@ -62,7 +63,7 @@ impl ThreadPool {
             tasks: HashSet::new(),
             task_sender: Some(task_sender),
             task_receiver: task_mreceiver.clone(),
-            result_receiver: result_receiver,
+            result_receiver,
             has_quit,
         }
     }
@@ -111,7 +112,7 @@ impl Drop for ThreadPool {
         while let Ok(_) = self.task_receiver.lock().unwrap().try_recv() {}
 
         for worker in &mut self.workers {
-            eprintln!("[{}] waiting for worker", worker.id);
+            trace!("[{}] waiting for worker", worker.id);
 
             if let Some(th) = worker.thread.take() {
                 th.join().unwrap();
@@ -152,33 +153,32 @@ impl Worker {
                 .unwrap();
 
             loop {
-                eprintln!("[{id}] Worker started.");
+                trace!("[{id}] Worker started.");
 
                 let mtask = task_receiver.lock().unwrap().recv();
 
                 match mtask {
                     Ok(task) => {
-                        // TODO
-                        // implement proper project logging
-                        eprintln!("[{id}] Worker got request to run {}.", task.req);
+                        trace!("[{id}] Worker got request to run {}.", task.req);
+                        debug!("executing {}", task.req.in_file);
 
                         if let Err(e) =
                             runtime.block_on(engine::run_js(node_modules_dir.clone(), &task.req))
                         {
-                            eprintln!(
-                                "[{id}] could not execute javascript file `{}`: {e}",
+                            error!(
+                                "could not execute javascript file `{}`: {e}",
                                 task.req.in_file
                             );
                         } else {
-                            eprintln!("[{id}] successfully executed `{}`.", task.req.in_file);
+                            trace!("[{id}] successfully executed `{}`.", task.req.in_file);
                         }
 
                         if let Err(e) = result_sender.send(task.id) {
-                            eprintln!("[{id}] could not mark task as done: {e}");
+                            error!("could not mark task as done: {e}");
                         }
                     }
                     Err(_) => {
-                        eprintln!("[{id}] Worker disconnected; shutting down.");
+                        trace!("[{id}] Worker disconnected; shutting down.");
                         break;
                     }
                 }

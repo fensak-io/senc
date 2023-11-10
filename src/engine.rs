@@ -10,6 +10,7 @@ use anyhow::{anyhow, Result};
 use deno_core::*;
 
 use crate::module_loader;
+use crate::ops;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
@@ -51,19 +52,38 @@ pub fn init_v8() {
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
 pub async fn run_js(node_modules_dir: Option<path::PathBuf>, req: &RunRequest) -> Result<()> {
-    let mut js_runtime = JsRuntime::new(RuntimeOptions {
-        module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
-            node_modules_dir,
-        ))),
-        startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
-        ..Default::default()
-    });
-
+    let mut js_runtime = new_runtime(node_modules_dir);
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
     let result = js_runtime.call_and_await(&main_fn).await?;
     let out_data = load_result(&mut js_runtime, result).unwrap();
     return write_data(&req.out_file_stem, &out_data);
+}
+
+fn new_runtime(node_modules_dir: Option<path::PathBuf>) -> JsRuntime {
+    let ext = Extension {
+        name: "opbuiltins",
+        ops: std::borrow::Cow::Borrowed(&[
+            ops::op_log_trace::DECL,
+            ops::op_log_debug::DECL,
+            ops::op_log_info::DECL,
+            ops::op_log_warn::DECL,
+            ops::op_log_error::DECL,
+        ]),
+        middleware_fn: Some(Box::new(|op| match op.name {
+            "op_print" => op.disable(),
+            _ => op,
+        })),
+        ..Default::default()
+    };
+    JsRuntime::new(RuntimeOptions {
+        module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
+            node_modules_dir,
+        ))),
+        extensions: vec![ext],
+        startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
+        ..Default::default()
+    })
 }
 
 async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result<usize> {

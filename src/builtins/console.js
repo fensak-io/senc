@@ -18,10 +18,22 @@
 
   globalThis.console = {
     log: (...args) => {
-      core.print(`[out]: ${argsToMessage(...args)}\n`, false);
+      core.ops.op_log_info(argsToMessage(...args));
+    },
+    trace: (...args) => {
+      core.ops.op_log_trace(argsToMessage(...args));
+    },
+    debug: (...args) => {
+      core.ops.op_log_debug(argsToMessage(...args));
+    },
+    info: (...args) => {
+      core.ops.op_log_info(argsToMessage(...args));
+    },
+    warn: (...args) => {
+      core.ops.op_log_warn(argsToMessage(...args));
     },
     error: (...args) => {
-      core.print(`[err]: ${argsToMessage(...args)}\n`, true);
+      core.ops.op_log_error(argsToMessage(...args));
     },
   };
 })(globalThis);
