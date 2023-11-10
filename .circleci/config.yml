@@ -1,17 +1,45 @@
 version: 2.1
 
 workflows:
-  release:
+  lint-test-release:
     jobs:
+      - lint
+      - test
       - release:
           context: 'Fensak CI/CD'
+          requires:
+            - lint
+            - test
           filters:
             branches:
               only:
                 - main
 
-
 jobs:
+  lint:
+    docker:
+      - image: cimg/rust:1.73
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
+      - checkout
+      - run:
+          name: cargo fmt check
+          command: cargo fmt --check
+      - run:
+          name: cargo build check
+          command: cargo check
+  test:
+    docker:
+      - image: cimg/rust:1.73
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
+      - checkout
+      # TODO: add cargo test
+
   release:
     docker:
       - image: cimg/node:lts
