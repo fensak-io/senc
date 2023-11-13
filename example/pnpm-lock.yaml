@@ -5,11 +5,27 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@fensak-io/senc-tfcore':
+    specifier: ^0.0.1
+    version: 0.0.1
+  '@fensak-io/senc-tfnull':
+    specifier: ^0.0.1
+    version: 0.0.1
   lodash-es:
     specifier: ^4.17.21
     version: 4.17.21
 
 packages:
+
+  /@fensak-io/senc-tfcore@0.0.1:
+    resolution: {integrity: sha512-MIvi3T+VssN8v536IHu368366p9uKWNfu6KOizNT+zsJKmFBW4sF0Q4xVQ8s8pBaWvcSFCSA43mNWk9IGOWAuw==, tarball: https://npm.pkg.github.com/download/@fensak-io/senc-tfcore/0.0.1/6554bfd1c586b62ab069852addf118a42df86aa8}
+    dev: false
+
+  /@fensak-io/senc-tfnull@0.0.1:
+    resolution: {integrity: sha512-qp6pn9Mo3d1O6G9QHD/rZwSqneLewqVbfKSVK/2MXxLzXqaZNmnEM7qhZz0/WEweaFFcDX5+sqYYJFGJHXl8vg==, tarball: https://npm.pkg.github.com/download/@fensak-io/senc-tfnull/0.0.1/3cccfe03d74497440bb5d6960a88f9c447756b99}
+    dependencies:
+      '@fensak-io/senc-tfcore': 0.0.1
+    dev: false
 
   /lodash-es@4.17.21:
     resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}

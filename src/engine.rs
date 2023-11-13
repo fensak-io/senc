@@ -98,7 +98,9 @@ async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result
     let mod_id = js_runtime.load_main_module(&main_module, None).await?;
     let result = js_runtime.mod_evaluate(mod_id);
     js_runtime.run_event_loop(false).await?;
-    result.await?.unwrap();
+    if let Err(e) = result.await? {
+        return Err(e);
+    }
     return Ok(mod_id);
 }
 

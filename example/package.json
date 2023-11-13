@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "lodash-es": "^4.17.21"
+    "lodash-es": "^4.17.21",
+    "@fensak-io/senc-tfcore": "^0.0.1",
+    "@fensak-io/senc-tfnull": "^0.0.1"
   }
 }
