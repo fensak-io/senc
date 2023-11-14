@@ -1,0 +1,11 @@
+// Copyright (c) Fensak, LLC.
+// SPDX-License-Identifier: MPL-2.0
+
+// Implements the following builtin path constants:
+// - __projectroot: the absolute path to the project root directory.
+// - __dirname: the absolute path to the directory containing the script file.
+// - __filename: the absolute path to the script file.
+
+globalThis.__projectroot = "{{ projectroot }}";
+globalThis.__dirname = "{{ dirname }}";
+globalThis.__filename = "{{ filename }}";

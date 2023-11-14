@@ -103,8 +103,12 @@ fn main() -> Result<()> {
         .with_context(|| format!("could not collect files to execute"))?;
 
     let has_quit = Arc::new(atomic::AtomicBool::new(false));
-    let mut pool =
-        threadpool::ThreadPool::new(node_modules_dir, args.parallelism, has_quit.clone());
+    let mut pool = threadpool::ThreadPool::new(
+        node_modules_dir,
+        projectroot,
+        args.parallelism,
+        has_quit.clone(),
+    );
     let hq = has_quit.clone();
     ctrlc::set_handler(move || {
         if hq.load(atomic::Ordering::SeqCst) {
