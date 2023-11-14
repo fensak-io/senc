@@ -18,7 +18,7 @@ extension!(
   builtins,
   // TODO
   // Make dynamic so it uses all files in builtins
-  js = [ dir "src/builtins", "console.js", "senc.js" ],
+  js = [ dir "src/builtins", "console.js", "path.js", "senc.js" ],
   docs = "Built in functions for senc.",
 );
 
@@ -30,7 +30,7 @@ fn main() {
     // Create the snapshot.
     let _snapshot = create_snapshot(CreateSnapshotOptions {
         cargo_manifest_dir: env!("CARGO_MANIFEST_DIR"),
-        snapshot_path: snapshot_path,
+        snapshot_path,
         startup_snapshot: None,
         extensions: vec![builtins::init_ops_and_esm()],
         compression_cb: None,

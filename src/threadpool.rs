@@ -33,6 +33,7 @@ impl ThreadPool {
     // gracefully shutdown the generation routine.
     pub fn new(
         node_modules_dir: Option<path::PathBuf>,
+        projectroot: path::PathBuf,
         size: usize,
         has_quit: Arc<atomic::AtomicBool>,
     ) -> ThreadPool {
@@ -53,6 +54,7 @@ impl ThreadPool {
             let result_sender_copy = result_sender.clone();
             workers.push(Worker::new(
                 node_modules_dir.clone(),
+                projectroot.clone(),
                 task_mreceiver.clone(),
                 result_sender_copy,
             ));
@@ -142,6 +144,7 @@ impl Worker {
     // task_receiver channel.
     fn new(
         node_modules_dir: Option<path::PathBuf>,
+        projectroot: path::PathBuf,
         task_receiver: Arc<Mutex<mpsc::Receiver<Task>>>,
         result_sender: mpsc::Sender<Uuid>,
     ) -> Worker {
@@ -162,10 +165,12 @@ impl Worker {
                         trace!("[{id}] Worker got request to run {}.", task.req);
                         debug!("executing {}", task.req.in_file);
 
-                        if let Err(e) = runtime.block_on(engine::run_js_and_write(
-                            node_modules_dir.clone(),
-                            &task.req,
-                        )) {
+                        let ctx = engine::Context {
+                            node_modules_dir: node_modules_dir.clone(),
+                            projectroot: projectroot.clone(),
+                        };
+                        if let Err(e) = runtime.block_on(engine::run_js_and_write(&ctx, &task.req))
+                        {
                             error!(
                                 "could not execute javascript file `{}`: {e}",
                                 task.req.in_file

@@ -18,6 +18,7 @@ ctrlc = "3.4.1"
 deno_ast = { version = "0.31.3", features = ["transpiling"] }
 deno_core = "0.229.0"
 env_logger = "0.10.0"
+handlebars = "4.5.0"
 lazy_static = "1.4.0"
 log = "0.4.20"
 regex = "1.10.2"

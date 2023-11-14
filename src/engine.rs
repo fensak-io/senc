@@ -1,10 +1,13 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
+use std::borrow;
+use std::collections;
 use std::fs;
 use std::io::Write;
 use std::path;
 use std::rc::Rc;
+use std::vec;
 
 use anyhow::{anyhow, Result};
 use deno_core::*;
@@ -14,6 +17,12 @@ use crate::ops;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
+
+// The runtime context, containing various metadata that is used by the builtin operations.
+pub struct Context {
+    pub node_modules_dir: Option<path::PathBuf>,
+    pub projectroot: path::PathBuf,
+}
 
 // A request to run a single JS/TS file through.
 pub struct RunRequest {
@@ -50,32 +59,30 @@ pub fn init_v8() {
     JsRuntime::init_platform(Some(platform));
 }
 
-pub async fn run_js_and_write(
-    node_modules_dir: Option<path::PathBuf>,
-    req: &RunRequest,
-) -> Result<()> {
-    let out_data = run_js(node_modules_dir, req).await?;
+pub async fn run_js_and_write(ctx: &Context, req: &RunRequest) -> Result<()> {
+    let out_data = run_js(ctx, req).await?;
     return write_data(&req.out_file_stem, &out_data);
 }
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
-async fn run_js(node_modules_dir: Option<path::PathBuf>, req: &RunRequest) -> Result<OutData> {
-    let mut js_runtime = new_runtime(node_modules_dir);
+async fn run_js(ctx: &Context, req: &RunRequest) -> Result<OutData> {
+    let mut js_runtime = new_runtime(ctx, req);
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
     let result = js_runtime.call_and_await(&main_fn).await?;
     return load_result(&mut js_runtime, result);
 }
 
-fn new_runtime(node_modules_dir: Option<path::PathBuf>) -> JsRuntime {
-    let ext = Extension {
+fn new_runtime(ctx: &Context, req: &RunRequest) -> JsRuntime {
+    let opext = Extension {
         name: "opbuiltins",
-        ops: std::borrow::Cow::Borrowed(&[
+        ops: borrow::Cow::Borrowed(&[
             ops::op_log_trace::DECL,
             ops::op_log_debug::DECL,
             ops::op_log_info::DECL,
             ops::op_log_warn::DECL,
             ops::op_log_error::DECL,
+            ops::op_path_relpath::DECL,
         ]),
         middleware_fn: Some(Box::new(|op| match op.name {
             "op_print" => op.disable(),
@@ -83,11 +90,12 @@ fn new_runtime(node_modules_dir: Option<path::PathBuf>) -> JsRuntime {
         })),
         ..Default::default()
     };
+    let tmplext = load_templated_builtins(ctx, req).unwrap();
     JsRuntime::new(RuntimeOptions {
         module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
-            node_modules_dir,
+            ctx.node_modules_dir.clone(),
         ))),
-        extensions: vec![ext],
+        extensions: vec![opext, tmplext],
         startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
         ..Default::default()
     })
@@ -198,6 +206,39 @@ fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
     return Ok(());
 }
 
+fn load_templated_builtins(ctx: &Context, req: &RunRequest) -> Result<Extension> {
+    let mut hbs = handlebars::Handlebars::new();
+    let staticpath_tmpl = include_str!("templated_builtins/staticpath.js.hbs");
+    hbs.register_template_string("t1", staticpath_tmpl)?;
+
+    let mut hbdata = collections::BTreeMap::new();
+    hbdata.insert(
+        "projectroot".to_string(),
+        ctx.projectroot.to_string_lossy().to_string(),
+    );
+    hbdata.insert("filename".to_string(), req.in_file.clone());
+    hbdata.insert(
+        "dirname".to_string(),
+        path::PathBuf::from(req.in_file.clone())
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .to_string(),
+    );
+    let rendered = hbs.render("t1", &hbdata).unwrap();
+
+    let specifier = "ext:builtins/staticpath.js";
+    let code = ExtensionFileSourceCode::Computed(rendered.into());
+    let files = vec![ExtensionFileSource { specifier, code }];
+    let ext = Extension {
+        name: "templatedbuiltins",
+        esm_entry_point: Some(specifier),
+        esm_files: borrow::Cow::Owned(files),
+        ..Default::default()
+    };
+    Ok(ext)
+}
+
 // Test cases
 
 #[cfg(test)]
@@ -207,6 +248,8 @@ mod tests {
     static EXPECTED_SIMPLE_OUTPUT_JSON: &str =
         "{\"foo\":\"bar\",\"fizz\":42,\"obj\":{\"msg\":\"hello world\"}}";
     static EXPECTED_LODASH_OUTPUT_JSON: &str = "{\"foo\":\"bar\",\"cfg\":false}";
+    static EXPECTED_RELPATH_OUTPUT_JSON: &str =
+        "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
 
     #[tokio::test]
     async fn test_engine_runs_js() {
@@ -218,7 +261,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let od = run_js(&get_context(), &req).await.unwrap();
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
@@ -233,7 +276,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let od = run_js(&get_context(), &req).await.unwrap();
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
@@ -248,19 +291,43 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(get_node_modules_dir(), &req).await.unwrap();
+        let od = run_js(&get_context(), &req).await.unwrap();
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
 
-    fn get_node_modules_dir() -> Option<path::PathBuf> {
-        Some(get_fixture_path("node_modules"))
+    #[tokio::test]
+    async fn test_engine_runs_code_with_builtin_filefunctions() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_RELPATH_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("aws/us-east-1/vpc/main.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
+        assert_eq!(actual_output, expected_output);
+    }
+
+    fn get_context() -> Context {
+        let node_modules_dir = Some(get_fixture_path("node_modules"));
+        let projectroot = get_fixture_path("");
+        Context {
+            node_modules_dir,
+            projectroot,
+        }
     }
 
     fn get_fixture_path(relpath: &str) -> path::PathBuf {
         let mut p = path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         p.push("tests/fixtures");
-        p.push(relpath);
+        if relpath != "" {
+            p.push(relpath);
+        }
         return p;
     }
 }

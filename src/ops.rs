@@ -1,6 +1,8 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
+use std::path;
+
 use deno_core::*;
 use log::*;
 
@@ -32,4 +34,21 @@ pub fn op_log_warn(#[string] msg: &str) -> Result<(), error::AnyError> {
 pub fn op_log_error(#[string] msg: &str) -> Result<(), error::AnyError> {
     error!("{msg}");
     Ok(())
+}
+
+#[op2]
+#[string]
+pub fn op_path_relpath(
+    #[string] base_str: &str,
+    #[string] p_str: &str,
+) -> Result<String, error::AnyError> {
+    let p = path::Path::new(p_str);
+    let relp = p.strip_prefix(base_str)?;
+    eprintln!(
+        "WTF: ({} ; {}) => {}",
+        p.to_string_lossy(),
+        base_str,
+        relp.to_string_lossy()
+    );
+    Ok(relp.to_string_lossy().to_string())
 }
