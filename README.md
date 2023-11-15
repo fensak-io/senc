@@ -1,5 +1,14 @@
 # senc
 
+<p align="center">
+  <a href="https://github.com/fensak-io/senc/releases/latest">
+    <img alt="latest release" src="https://img.shields.io/github/v/release/fensak-io/senc?style=for-the-badge">
+  </a>
+  <a href="https://github.com/fensak-io/senc/blob/main/LICENSE">
+    <img alt="LICENSE" src="https://img.shields.io/badge/LICENSE-MPL_2.0-orange?style=for-the-badge">
+  </a>
+</p>
+
 [senc](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity)
 [TypeScript](https://www.typescriptlang.org/) interpreter for generating Infrastructure as Code (IaC). Use a familiar,
 type-safe programming language to define and provision infrastructure, with protections that make your code easy to
