@@ -4,14 +4,65 @@ workflows:
   lint-test-release:
     jobs:
       - lint-test
-      - release:
-          context: 'Fensak CI/CD'
-          requires:
-            - lint-test
+      - build-unix:
+          name: build-linux-amd64
+          os: linux
+          artifactname: senc-linux-amd64.tar.gz
           filters:
             branches:
               only:
                 - main
+      - build-unix:
+          name: build-linux-arm64
+          os: linuxarm
+          artifactname: senc-linux-arm64.tar.gz
+          filters:
+            branches:
+              only:
+                - main
+      - build-windows-amd64:
+          filters:
+            branches:
+              only:
+                - main
+
+      # NOTE:
+      # The darwin-arm64 build is temporarily disabled since we don't have access to the M1 environment.
+      # This environment will be accessible starting May 2024.
+      # - build-unix:
+      #     name: build-darwin-arm64
+      #     os: macos
+      #     artifactname: senc-darwin-arm64.tar.gz
+      #     filters:
+      #       branches:
+      #         only:
+      #           - main
+
+      - release:
+          context: 'Fensak CI/CD'
+          requires:
+            - build-linux-amd64
+            - build-linux-arm64
+            - build-windows-amd64
+            # - build-darwin-arm64
+          filters:
+            branches:
+              only:
+                - main
+
+executors:
+  linux:
+    docker:
+      - image: cimg/rust:1.73
+  linuxarm:
+    docker:
+      - image: cimg/rust:1.73
+    resource_class: arm.large
+  macos:
+    # https://circleci.com/docs/using-macos/
+    macos:
+      xcode: 15.0.0
+    resource_class: macos.m1.medium.gen1
 
 jobs:
   lint-test:
@@ -44,10 +95,83 @@ jobs:
           name: cargo test
           command: cargo test
 
+  build-windows-amd64:
+    machine:
+      image: windows-server-2022-gui:current
+    resource_class: windows.large
+    shell: powershell.exe -ExecutionPolicy Bypass
+    environment:
+      PYTHON: 'C:\Python311\python'
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
+      - checkout
+      - run:
+          name: setup build env
+          command: |
+            # Switch from gnu targeted rust to msvc targeted rust
+            choco uninstall -y rust
+            choco install -y rust-ms
+      - run:
+          name: build senc
+          command: |
+            cargo build --release
+      - run:
+          name: package build artifact
+          command: |
+            New-Item -Name ".build" -Type Directory
+            New-Item -Name ".build\prepartifact" -Type Directory
+            New-Item -Name ".build\artifact" -Type Directory
+            Copy-Item -Path "target\release\senc" -Destination ".build\prepartifact"
+            Copy-Item -Path "LICENSE" -Destination ".build\prepartifact"
+            Set-Location -Path ".build\prepartifact"
+            tar -zcf "..\artifact\senc-windows-amd64-msvc.tar.gz" *
+      - persist_to_workspace:
+          root: .build/artifact
+          paths:
+            - senc-windows-amd64-msvc.tar.gz
+
+  build-unix:
+    parameters:
+      os:
+        type: executor
+      artifactname:
+        type: string
+    executor: << parameters.os >>
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
+      - checkout
+      - run:
+          name: build senc
+          command: |
+            cargo build --release
+      - run:
+          name: package build artifact
+          command: |
+            mkdir -p ./.build/prepartifact
+            mkdir -p ./.build/artifact
+            cp target/release/senc ./.build/prepartifact
+            cp LICENSE ./.build/prepartifact
+
+            cd ./.build/prepartifact
+            tar -zcf ../artifact/<< parameters.artifactname >> *
+      - persist_to_workspace:
+          root: .build/artifact
+          paths:
+            - << parameters.artifactname >>
+
   release:
     docker:
       - image: cimg/node:lts
     steps:
+      - attach_workspace:
+          at: /tmp/artifact
+      - run:
+          command: |
+            ls -lah /tmp/artifact
       - add_ssh_keys:
           fingerprints:
             - "8f:1a:b4:37:9c:ca:cf:49:04:e7:ce:0d:b5:ee:2a:0d"
