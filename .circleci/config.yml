@@ -12,6 +12,7 @@ workflows:
             branches:
               only:
                 - main
+                - release
       - build-unix:
           name: build-linux-arm64
           os: linuxarm
@@ -20,11 +21,13 @@ workflows:
             branches:
               only:
                 - main
+                - release
       - build-windows-amd64:
           filters:
             branches:
               only:
                 - main
+                - release
 
       # NOTE:
       # The darwin-arm64 build is temporarily disabled since we don't have access to the M1 environment.
@@ -48,7 +51,7 @@ workflows:
           filters:
             branches:
               only:
-                - main
+                - release
 
 executors:
   linux:
@@ -127,10 +130,17 @@ jobs:
             Copy-Item -Path "LICENSE" -Destination ".build\prepartifact"
             Set-Location -Path ".build\prepartifact"
             tar -zcf "..\artifact\senc-windows-amd64-msvc.tar.gz" *
-      - persist_to_workspace:
-          root: .build/artifact
-          paths:
-            - senc-windows-amd64-msvc.tar.gz
+
+      - when:
+          condition:
+            matches:
+              pattern: "^release$"
+              value: << pipeline.git.branch >>
+          steps:
+            - persist_to_workspace:
+                root: .build/artifact
+                paths:
+                  - senc-windows-amd64-msvc.tar.gz
 
   build-unix:
     parameters:
@@ -158,10 +168,16 @@ jobs:
 
             cd ./.build/prepartifact
             tar -zcf ../artifact/<< parameters.artifactname >> *
-      - persist_to_workspace:
-          root: .build/artifact
-          paths:
-            - << parameters.artifactname >>
+      - when:
+          condition:
+            matches:
+              pattern: "^release$"
+              value: << pipeline.git.branch >>
+          steps:
+            - persist_to_workspace:
+                root: .build/artifact
+                paths:
+                  - << parameters.artifactname >>
 
   release:
     docker:
