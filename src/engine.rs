@@ -1,7 +1,7 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-use std::borrow;
+use std::borrow::{Borrow, Cow};
 use std::collections;
 use std::fs;
 use std::io::Write;
@@ -12,6 +12,7 @@ use std::vec;
 use anyhow::{anyhow, Result};
 use deno_core::*;
 
+use crate::files;
 use crate::module_loader;
 use crate::ops;
 
@@ -19,9 +20,11 @@ use crate::ops;
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
 
 // The runtime context, containing various metadata that is used by the builtin operations.
+#[derive(Clone)]
 pub struct Context {
     pub node_modules_dir: Option<path::PathBuf>,
     pub projectroot: path::PathBuf,
+    pub out_dir: path::PathBuf,
 }
 
 // A request to run a single JS/TS file through.
@@ -32,7 +35,21 @@ pub struct RunRequest {
 
 // The data to be written to disk, including the file extension to use.
 pub struct OutData {
-    out_ext: String,
+    // The output file path. If set, this will override the default output file path that is based
+    // on the input file and project root.
+    //
+    // When set, this must be a relative path. The relative path will be relative to the original
+    // output directory. The path can traverse outside the default directory, but it can not
+    // traverse outside of the project root.
+    //
+    // Exactly one of out_path or out_ext may be set.
+    out_path: Option<String>,
+
+    // The extension of the output file, including the preceding `.`
+    // Exactly one of out_path or out_ext may be set.
+    out_ext: Option<String>,
+
+    // The full, raw string contents of the output file.
     data: String,
 }
 
@@ -60,12 +77,19 @@ pub fn init_v8() {
 }
 
 pub async fn run_js_and_write(ctx: &Context, req: &RunRequest) -> Result<()> {
-    let out_data = run_js(ctx, req).await?;
-    return write_data(&req.out_file_stem, &out_data);
+    let out_data_vec = run_js(ctx, req).await?;
+    for d in out_data_vec {
+        // TODO
+        // collect the errors and return one big error instead of failing fast
+        if let Err(e) = write_data(ctx.out_dir.as_path(), &req.out_file_stem, &d) {
+            return Err(e);
+        }
+    }
+    return Ok(());
 }
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
-async fn run_js(ctx: &Context, req: &RunRequest) -> Result<OutData> {
+async fn run_js(ctx: &Context, req: &RunRequest) -> Result<vec::Vec<OutData>> {
     let mut js_runtime = new_runtime(ctx, req);
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id).unwrap();
@@ -76,7 +100,7 @@ async fn run_js(ctx: &Context, req: &RunRequest) -> Result<OutData> {
 fn new_runtime(ctx: &Context, req: &RunRequest) -> JsRuntime {
     let opext = Extension {
         name: "opbuiltins",
-        ops: borrow::Cow::Borrowed(&[
+        ops: Cow::Borrowed(&[
             ops::op_log_trace::DECL,
             ops::op_log_debug::DECL,
             ops::op_log_info::DECL,
@@ -126,28 +150,53 @@ fn load_main_fn(js_runtime: &mut JsRuntime, mod_id: usize) -> Result<v8::Global<
     return Ok(main_fn);
 }
 
-fn load_result(js_runtime: &mut JsRuntime, result: v8::Global<v8::Value>) -> Result<OutData> {
-    let mut scope = &mut js_runtime.handle_scope();
-    let mut result_local = v8::Local::new(&mut scope, result);
+fn load_result(
+    js_runtime: &mut JsRuntime,
+    result: v8::Global<v8::Value>,
+) -> Result<vec::Vec<OutData>> {
+    let mut out: vec::Vec<OutData> = vec::Vec::new();
 
-    let mut out_ext = ".json".to_string();
+    let mut scope = &mut js_runtime.handle_scope();
+    let result_local = v8::Local::new(&mut scope, result);
+
+    // Determine if the raw JS object from the runtime is an out data list object, in which case
+    // each element needs to be cycled and converted.
+    if result_is_senc_out_data_array(&mut scope, result_local) {
+        let result_arr: v8::Local<v8::Array> = result_local.try_into().unwrap();
+        let result_arr_raw: &v8::Array = result_arr.borrow();
+        let sz = result_arr_raw.length();
+        for i in 0..sz {
+            let item = result_arr_raw.get_index(&mut scope, i).unwrap();
+            let single_out = load_one_result(&mut scope, item).unwrap();
+            out.push(single_out);
+        }
+    } else {
+        let single_out = load_one_result(&mut scope, result_local).unwrap();
+        out.push(single_out);
+    }
+
+    return Ok(out);
+}
+
+fn load_one_result(
+    scope: &mut v8::HandleScope,
+    orig_result_local: v8::Local<v8::Value>,
+) -> Result<OutData> {
+    let mut result_local = orig_result_local.clone();
+    let mut out_path: Option<String> = None;
+    let mut out_ext = Some(String::from(".json"));
     let mut out_type = OutputType::JSON;
 
     // Determine if the raw JS object from the runtime is an out data object.
-    let result_obj: v8::Local<v8::Object> = result_local.try_into().unwrap();
-    let is_senc_out_data_key: v8::Local<v8::Value> =
-        v8::String::new(&mut scope, "__is_senc_out_data")
-            .unwrap()
-            .into();
-    if result_obj.has(&mut scope, is_senc_out_data_key).unwrap() {
-        let out_type_key: v8::Local<v8::Value> =
-            v8::String::new(&mut scope, "out_type").unwrap().into();
+    if result_is_senc_out_data(scope, result_local) {
+        let result_obj: v8::Local<v8::Object> = result_local.try_into().unwrap();
+        let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
         let out_type_local: v8::Local<v8::String> = result_obj
-            .get(&mut scope, out_type_key)
+            .get(scope, out_type_key)
             .unwrap()
             .try_into()
             .unwrap();
-        let out_type_str: &str = &out_type_local.to_rust_string_lossy(&mut scope);
+        let out_type_str: &str = &out_type_local.to_rust_string_lossy(scope);
         match out_type_str {
             "yaml" => {
                 out_type = OutputType::YAML;
@@ -156,19 +205,28 @@ fn load_result(js_runtime: &mut JsRuntime, result: v8::Global<v8::Value>) -> Res
             s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
         }
 
-        let out_ext_key: v8::Local<v8::Value> =
-            v8::String::new(&mut scope, "out_ext").unwrap().into();
-        let out_ext_local: v8::Local<v8::String> = result_obj
-            .get(&mut scope, out_ext_key)
-            .unwrap()
-            .try_into()
-            .unwrap();
-        out_ext = out_ext_local.to_rust_string_lossy(&mut scope);
+        let out_path_key: v8::Local<v8::Value> = v8::String::new(scope, "out_path").unwrap().into();
+        let out_ext_key: v8::Local<v8::Value> = v8::String::new(scope, "out_ext").unwrap().into();
+        let maybe_out_path: v8::Local<v8::Value> = result_obj.get(scope, out_path_key).unwrap();
+        let maybe_out_ext: v8::Local<v8::Value> = result_obj.get(scope, out_ext_key).unwrap();
 
-        let out_data_key: v8::Local<v8::Value> =
-            v8::String::new(&mut scope, "data").unwrap().into();
+        if maybe_out_path.is_string() && maybe_out_ext.is_string() {
+            return Err(anyhow!(
+                "OutData object can only have at most one of out_path or out_ext set, but not both"
+            ));
+        } else if maybe_out_path.is_string() {
+            let out_path_local: v8::Local<v8::String> = maybe_out_path.try_into().unwrap();
+            out_path = Some(out_path_local.to_rust_string_lossy(scope));
+            out_ext = None;
+        } else if maybe_out_ext.is_string() {
+            let out_ext_local: v8::Local<v8::String> = maybe_out_ext.try_into().unwrap();
+            out_ext = Some(out_ext_local.to_rust_string_lossy(scope));
+            out_path = None;
+        }
+
+        let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
         result_local = result_obj
-            .get(&mut scope, out_data_key)
+            .get(scope, out_data_key)
             .unwrap()
             .try_into()
             .unwrap();
@@ -177,27 +235,74 @@ fn load_result(js_runtime: &mut JsRuntime, result: v8::Global<v8::Value>) -> Res
     let data = match out_type {
         OutputType::JSON => {
             let deserialized_result =
-                serde_v8::from_v8::<serde_json::Value>(&mut scope, result_local).unwrap();
+                serde_v8::from_v8::<serde_json::Value>(scope, result_local).unwrap();
             serde_json::to_string(&deserialized_result)
                 .unwrap()
                 .to_string()
         }
         OutputType::YAML => {
             let deserialized_result =
-                serde_v8::from_v8::<serde_yaml::Value>(&mut scope, result_local).unwrap();
+                serde_v8::from_v8::<serde_yaml::Value>(scope, result_local).unwrap();
             serde_yaml::to_string(&deserialized_result)
                 .unwrap()
                 .to_string()
         }
     };
-    return Ok(OutData { out_ext, data });
+    return Ok(OutData {
+        out_path,
+        out_ext,
+        data,
+    });
 }
 
-fn write_data(out_file_stem: &str, data: &OutData) -> Result<()> {
-    let mut out_file_path_str = out_file_stem.to_owned();
-    out_file_path_str.push_str(&data.out_ext);
+fn result_is_senc_out_data(
+    scope: &mut v8::HandleScope,
+    result_local: v8::Local<v8::Value>,
+) -> bool {
+    if !result_local.is_object() {
+        return false;
+    }
 
-    let out_file_path = path::PathBuf::from(out_file_path_str);
+    let result_obj: v8::Local<v8::Object> = result_local.try_into().unwrap();
+    let is_senc_out_data_key: v8::Local<v8::Value> =
+        v8::String::new(scope, "__is_senc_out_data").unwrap().into();
+    return result_obj.has(scope, is_senc_out_data_key).unwrap();
+}
+
+fn result_is_senc_out_data_array(
+    scope: &mut v8::HandleScope,
+    result_local: v8::Local<v8::Value>,
+) -> bool {
+    if !result_local.is_array() {
+        return false;
+    }
+
+    let result_arr: v8::Local<v8::Array> = result_local.try_into().unwrap();
+    let is_senc_out_data_array_key: v8::Local<v8::Value> =
+        v8::String::new(scope, "__is_senc_out_data_array")
+            .unwrap()
+            .into();
+    return result_arr.has(scope, is_senc_out_data_array_key).unwrap();
+}
+
+fn write_data(out_dir: &path::Path, out_file_stem: &str, data: &OutData) -> Result<()> {
+    let mut out_file_path_str = String::new();
+    if let Some(out_path) = &data.out_path {
+        let mut out_file_stem_dir = path::PathBuf::from(out_file_stem)
+            .parent()
+            .unwrap()
+            .to_owned();
+        out_file_stem_dir.push(&out_path);
+        out_file_path_str.push_str(&out_file_stem_dir.to_string_lossy());
+    } else {
+        out_file_path_str.push_str(out_file_stem);
+        out_file_path_str.push_str(&data.out_ext.clone().unwrap());
+    }
+    let out_file_path = path_clean::clean(path::PathBuf::from(out_file_path_str));
+    if let Err(e) = files::assert_file_path_in_projectroot(&out_file_path, out_dir) {
+        return Err(e);
+    }
+
     let out_file_dir = out_file_path.parent().unwrap();
     fs::create_dir_all(out_file_dir)?;
     let mut f = fs::File::create(out_file_path)?;
@@ -233,7 +338,7 @@ fn load_templated_builtins(ctx: &Context, req: &RunRequest) -> Result<Extension>
     let ext = Extension {
         name: "templatedbuiltins",
         esm_entry_point: Some(specifier),
-        esm_files: borrow::Cow::Owned(files),
+        esm_files: Cow::Owned(files),
         ..Default::default()
     };
     Ok(ext)
@@ -250,6 +355,7 @@ mod tests {
     static EXPECTED_LODASH_OUTPUT_JSON: &str = "{\"foo\":\"bar\",\"cfg\":false}";
     static EXPECTED_RELPATH_OUTPUT_JSON: &str =
         "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
+    static EXPECTED_OUTFILE_OUTPUT_JSON: &str = "{\"this\":\"outfile.js\"}";
 
     #[tokio::test]
     async fn test_engine_runs_js() {
@@ -261,7 +367,14 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(&get_context(), &req).await.unwrap();
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".json")));
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
@@ -276,7 +389,14 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(&get_context(), &req).await.unwrap();
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".json")));
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
@@ -291,7 +411,14 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(&get_context(), &req).await.unwrap();
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".json")));
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
@@ -306,20 +433,77 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od = run_js(&get_context(), &req)
+        let od_vec = run_js(&get_context(), &req)
             .await
             .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".json")));
         let actual_output: serde_json::Value = serde_json::from_str(&od.data).unwrap();
+        assert_eq!(actual_output, expected_output);
+    }
+
+    #[tokio::test]
+    async fn test_engine_runs_code_with_out_data_output() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_OUTFILE_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("outfile.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".yml")));
+        let actual_output: serde_json::Value = serde_yaml::from_str(&od.data).unwrap();
         assert_eq!(actual_output, expected_output);
     }
 
     fn get_context() -> Context {
         let node_modules_dir = Some(get_fixture_path("node_modules"));
         let projectroot = get_fixture_path("");
+        let out_dir = get_fixture_path("");
         Context {
             node_modules_dir,
             projectroot,
+            out_dir,
         }
+    }
+
+    #[tokio::test]
+    async fn test_engine_runs_code_with_out_data_list_output() {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(EXPECTED_OUTFILE_OUTPUT_JSON).unwrap();
+
+        let p = get_fixture_path("multi_outfile.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 2);
+
+        let d1 = &od_vec[0];
+        assert_eq!(d1.out_path, None);
+        assert_eq!(d1.out_ext, Some(String::from(".yml")));
+        let actual_output1: serde_json::Value = serde_yaml::from_str(&d1.data).unwrap();
+        assert_eq!(actual_output1, expected_output);
+
+        let d2 = &od_vec[1];
+        assert_eq!(d2.out_path, None);
+        assert_eq!(d2.out_ext, Some(String::from(".json")));
+        let actual_output2: serde_json::Value = serde_json::from_str(&d2.data).unwrap();
+        assert_eq!(actual_output2, expected_output);
     }
 
     fn get_fixture_path(relpath: &str) -> path::PathBuf {

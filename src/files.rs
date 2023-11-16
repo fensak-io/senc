@@ -83,7 +83,10 @@ fn run_requests_from_dir(
     return Ok(reqs);
 }
 
-fn assert_file_path_in_projectroot(file_path: &path::Path, projectroot: &path::Path) -> Result<()> {
+pub fn assert_file_path_in_projectroot(
+    file_path: &path::Path,
+    projectroot: &path::Path,
+) -> Result<()> {
     if file_path == projectroot {
         return Ok(());
     }

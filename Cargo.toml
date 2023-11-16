@@ -21,6 +21,7 @@ env_logger = "0.10.0"
 handlebars = "4.5.0"
 lazy_static = "1.4.0"
 log = "0.4.20"
+path-clean = "1.0.1"
 regex = "1.10.2"
 serde_yaml = "0.9.27"
 tokio = { version = "1.33.0", features = ["full"] }
