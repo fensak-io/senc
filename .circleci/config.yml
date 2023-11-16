@@ -126,7 +126,7 @@ jobs:
             New-Item -Name ".build" -Type Directory
             New-Item -Name ".build\prepartifact" -Type Directory
             New-Item -Name ".build\artifact" -Type Directory
-            Copy-Item -Path "target\release\senc" -Destination ".build\prepartifact"
+            Copy-Item -Path "target\release\senc.exe" -Destination ".build\prepartifact"
             Copy-Item -Path "LICENSE" -Destination ".build\prepartifact"
             Set-Location -Path ".build\prepartifact"
             tar -zcf "..\artifact\senc-windows-amd64-msvc.tar.gz" *
