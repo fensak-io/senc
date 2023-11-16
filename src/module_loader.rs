@@ -45,7 +45,7 @@ impl TsModuleLoader {
             Some(p) => p,
         };
 
-        let new_specifier_path = find_node_module_specifier(node_modules_path, specifier).unwrap();
+        let new_specifier_path = find_node_module_specifier(node_modules_path, specifier)?;
         let new_specifier = new_specifier_path.to_str().unwrap();
 
         resolve_import(new_specifier, referrer).map_err(|e| e.into())
@@ -134,7 +134,7 @@ fn find_node_module_specifier(
 ) -> AnyhowResult<path::PathBuf> {
     let specifier_path = node_modules_dir.join(path::PathBuf::from(specifier));
     if specifier_path.is_file() {
-        return Ok(fs::canonicalize(specifier_path).unwrap());
+        return Ok(fs::canonicalize(specifier_path)?);
     }
 
     let package_json_path = specifier_path.join("package.json");
@@ -146,11 +146,11 @@ fn find_node_module_specifier(
     }
 
     let package_json_raw = std::fs::read_to_string(package_json_path)?;
-    let package_json: serde_json::Value = serde_json::from_str(&package_json_raw).unwrap();
+    let package_json: serde_json::Value = serde_json::from_str(&package_json_raw)?;
     if package_json["module"] == serde_json::Value::Null {
         return Err(anyhow!("node package {} does not have ESM root", specifier));
     }
 
     let specifier_root_path = specifier_path.join(package_json["module"].as_str().unwrap());
-    return Ok(fs::canonicalize(specifier_root_path).unwrap());
+    return Ok(fs::canonicalize(specifier_root_path)?);
 }

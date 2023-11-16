@@ -68,14 +68,14 @@ impl ThreadPool {
     }
 
     // Send a single run request to the thread pool.
-    pub fn run(&mut self, req: engine::RunRequest) {
+    pub fn run(&mut self, req: engine::RunRequest) -> Result<()> {
         let task_id = Uuid::new_v4();
         self.task_sender
             .as_ref()
             .unwrap()
-            .send(Task { id: task_id, req })
-            .unwrap();
+            .send(Task { id: task_id, req })?;
         self.tasks.insert(task_id);
+        Ok(())
     }
 
     // Wait for all requests to finish running. This function will exit early if

@@ -78,13 +78,13 @@ fn main() -> Result<()> {
     let args = Cli::parse();
     logger::init(&args.loglevel, args.no_color);
 
-    let fpath = fs::canonicalize(&args.path).unwrap();
-    let projectroot = fs::canonicalize(&args.projectroot).unwrap();
+    let fpath = fs::canonicalize(&args.path)?;
+    let projectroot = fs::canonicalize(&args.projectroot)?;
     let out_dir = match fs::canonicalize(&args.outdir) {
         Ok(d) => d,
         Err(_e) => {
             fs::create_dir_all(&args.outdir)?;
-            fs::canonicalize(&args.outdir).unwrap()
+            fs::canonicalize(&args.outdir)?
         }
     };
 
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
     .expect("Error setting Ctrl-C handler");
 
     for r in requests {
-        pool.run(r);
+        pool.run(r)?;
     }
     pool.wait()
         .with_context(|| format!("could not run all files"))?;
