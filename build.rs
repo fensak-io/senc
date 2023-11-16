@@ -41,5 +41,6 @@ fn main() {
     // TODO
     // Make dynamic so it uses all files in builtins
     println!("cargo:rerun-if-changed=src/builtins/console.js");
+    println!("cargo:rerun-if-changed=src/builtins/path.js");
     println!("cargo:rerun-if-changed=src/builtins/senc.js");
 }

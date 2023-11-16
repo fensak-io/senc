@@ -80,7 +80,7 @@ fn main() -> Result<()> {
 
     let fpath = fs::canonicalize(&args.path).unwrap();
     let projectroot = fs::canonicalize(&args.projectroot).unwrap();
-    let outdir = match fs::canonicalize(&args.outdir) {
+    let out_dir = match fs::canonicalize(&args.outdir) {
         Ok(d) => d,
         Err(_e) => {
             fs::create_dir_all(&args.outdir)?;
@@ -99,16 +99,16 @@ fn main() -> Result<()> {
 
     engine::init_v8();
 
-    let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
+    let requests = files::get_run_requests_from_path(&fpath, &out_dir, &projectroot)
         .with_context(|| format!("could not collect files to execute"))?;
 
     let has_quit = Arc::new(atomic::AtomicBool::new(false));
-    let mut pool = threadpool::ThreadPool::new(
+    let ctx = engine::Context {
         node_modules_dir,
         projectroot,
-        args.parallelism,
-        has_quit.clone(),
-    );
+        out_dir,
+    };
+    let mut pool = threadpool::ThreadPool::new(ctx, args.parallelism, has_quit.clone());
     let hq = has_quit.clone();
     ctrlc::set_handler(move || {
         if hq.load(atomic::Ordering::SeqCst) {

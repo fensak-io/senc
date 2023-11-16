@@ -11,5 +11,9 @@ export function main() {
   const f = find(foo(), (i) => {
     return i.foo === "bar";
   })
-  return new senc.OutData(".yml", "yaml", f);
+  return new senc.OutData({
+    out_ext: ".yml",
+    out_type: "yaml",
+    data: f,
+  });
 }
