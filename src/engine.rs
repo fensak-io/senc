@@ -33,6 +33,16 @@ pub struct RunRequest {
     pub out_file_stem: String,
 }
 
+impl std::fmt::Display for RunRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "request to run {} to generate {}",
+            self.in_file, self.out_file_stem
+        )
+    }
+}
+
 // The data to be written to disk, including the file extension to use.
 pub struct OutData {
     // The output file path. If set, this will override the default output file path that is based
@@ -59,16 +69,6 @@ enum OutputType {
     YAML,
 }
 
-impl std::fmt::Display for RunRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "request to run {} to generate {}",
-            self.in_file, self.out_file_stem
-        )
-    }
-}
-
 // Initialize the v8 platform. This should be called in the main thread before any subthreads are
 // launched.
 pub fn init_v8() {
@@ -76,6 +76,9 @@ pub fn init_v8() {
     JsRuntime::init_platform(Some(platform));
 }
 
+// Process the request to run the JavaScript or TypeScript file to render the output in to the
+// configured output dir. This will run the script and then write the output to the computed
+// destination in one step.
 pub async fn run_js_and_write(ctx: &Context, req: &RunRequest) -> Result<()> {
     let out_data_vec = run_js(ctx, req).await?;
     for d in out_data_vec {
@@ -95,6 +98,7 @@ async fn run_js(ctx: &Context, req: &RunRequest) -> Result<vec::Vec<OutData>> {
     return load_result(&mut js_runtime, result);
 }
 
+// Initialize a new JsRuntime object (which represents an Isolate) with all the extensions loaded.
 fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
     let opext = Extension {
         name: "opbuiltins",
@@ -113,16 +117,21 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
         ..Default::default()
     };
     let tmplext = load_templated_builtins(ctx, req)?;
-    Ok(JsRuntime::new(RuntimeOptions {
+    let opts = RuntimeOptions {
         module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
             ctx.node_modules_dir.clone(),
         ))),
         extensions: vec![opext, tmplext],
+        // NOTE
+        // This snapshot contains the builtins/*.js scripts and is constructed in the build.rs
+        // script.
         startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
         ..Default::default()
-    }))
+    };
+    Ok(JsRuntime::new(opts))
 }
 
+// Load the main module. The main module is the main entrypoint that is being executed by senc.
 async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result<usize> {
     let main_module = resolve_path(file_path, std::env::current_dir()?.as_path())?;
     let mod_id = js_runtime.load_main_module(&main_module, None).await?;
@@ -132,6 +141,8 @@ async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result
     return Ok(mod_id);
 }
 
+// Load the main function from the main module. This is the main function that is exported in the
+// main module script.
 fn load_main_fn(js_runtime: &mut JsRuntime, mod_id: usize) -> Result<v8::Global<v8::Function>> {
     let ns = js_runtime.get_module_namespace(mod_id)?;
     let mut scope = js_runtime.handle_scope();
@@ -145,6 +156,8 @@ fn load_main_fn(js_runtime: &mut JsRuntime, mod_id: usize) -> Result<v8::Global<
     return Ok(main_fn);
 }
 
+// Load the result from the main function as a vector of OutData that can be outputed to disk. Each
+// OutData represents a single file that should be outputed.
 fn load_result(
     js_runtime: &mut JsRuntime,
     result: v8::Global<v8::Value>,
@@ -156,7 +169,7 @@ fn load_result(
 
     // Determine if the raw JS object from the runtime is an out data list object, in which case
     // each element needs to be cycled and converted.
-    if result_is_senc_out_data_array(&mut scope, result_local)? {
+    if result_is_sencjs_out_data_array(&mut scope, result_local)? {
         let result_arr: v8::Local<v8::Array> = result_local.try_into()?;
         let result_arr_raw: &v8::Array = result_arr.borrow();
         let sz = result_arr_raw.length();
@@ -173,51 +186,29 @@ fn load_result(
     return Ok(out);
 }
 
-fn load_one_result(
-    scope: &mut v8::HandleScope,
-    orig_result_local: v8::Local<v8::Value>,
+// Load a single result data item. This can handle either of the following:
+// - An OutData object (in JS, not to be confused by the OutData struct defined in this file). This
+//   allows customization of the output behavior on a file by file basis.
+// - Anything else would be treated as raw object to be serialized to JSON.
+fn load_one_result<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    orig_result_local: v8::Local<'a, v8::Value>,
 ) -> Result<OutData> {
     let mut result_local = orig_result_local.clone();
+
+    // Defaults
     let mut out_path: Option<String> = None;
     let mut out_ext = Some(String::from(".json"));
     let mut out_type = OutputType::JSON;
 
-    // Determine if the raw JS object from the runtime is an out data object.
-    if result_is_senc_out_data(scope, result_local)? {
-        let result_obj: v8::Local<v8::Object> = result_local.try_into()?;
-        let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
-        let out_type_local: v8::Local<v8::String> =
-            result_obj.get(scope, out_type_key).unwrap().try_into()?;
-        let out_type_str: &str = &out_type_local.to_rust_string_lossy(scope);
-        match out_type_str {
-            "yaml" => {
-                out_type = OutputType::YAML;
-            }
-            "" | "json" => {} // Use default
-            s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
-        }
-
-        let out_path_key: v8::Local<v8::Value> = v8::String::new(scope, "out_path").unwrap().into();
-        let out_ext_key: v8::Local<v8::Value> = v8::String::new(scope, "out_ext").unwrap().into();
-        let maybe_out_path: v8::Local<v8::Value> = result_obj.get(scope, out_path_key).unwrap();
-        let maybe_out_ext: v8::Local<v8::Value> = result_obj.get(scope, out_ext_key).unwrap();
-
-        if maybe_out_path.is_string() && maybe_out_ext.is_string() {
-            return Err(anyhow!(
-                "OutData object can only have at most one of out_path or out_ext set, but not both"
-            ));
-        } else if maybe_out_path.is_string() {
-            let out_path_local: v8::Local<v8::String> = maybe_out_path.try_into()?;
-            out_path = Some(out_path_local.to_rust_string_lossy(scope));
-            out_ext = None;
-        } else if maybe_out_ext.is_string() {
-            let out_ext_local: v8::Local<v8::String> = maybe_out_ext.try_into()?;
-            out_ext = Some(out_ext_local.to_rust_string_lossy(scope));
-            out_path = None;
-        }
-
-        let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
-        result_local = result_obj.get(scope, out_data_key).unwrap().try_into()?;
+    // Determine if the raw JS object from the runtime is an out data object, and if it is, process
+    // it.
+    if result_is_sencjs_out_data(scope, result_local)? {
+        let (op, oe, ot, rs) = load_one_sencjs_out_data_result(scope, result_local)?;
+        out_path = op;
+        out_ext = oe;
+        out_type = ot;
+        result_local = rs;
     }
 
     let data = match out_type {
@@ -237,7 +228,69 @@ fn load_one_result(
     });
 }
 
-fn result_is_senc_out_data(
+// Load a single result from the main function that is a JS OutData object (not to be confused with
+// the OutData struct defined in this file).
+fn load_one_sencjs_out_data_result<'a>(
+    scope: &mut v8::HandleScope<'a>,
+    result_local: v8::Local<'a, v8::Value>,
+) -> Result<(
+    // out_path
+    Option<String>,
+    // out_ext
+    Option<String>,
+    // out_type
+    OutputType,
+    // result_local
+    v8::Local<'a, v8::Value>,
+)> {
+    let mut out_path: Option<String> = None;
+    let mut out_ext: Option<String> = None;
+    let mut out_type = OutputType::JSON;
+
+    let result_obj: v8::Local<v8::Object> = result_local.try_into()?;
+    let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
+    let out_type_local: v8::Local<v8::String> =
+        result_obj.get(scope, out_type_key).unwrap().try_into()?;
+    let out_type_str: &str = &out_type_local.to_rust_string_lossy(scope);
+    match out_type_str {
+        "yaml" => {
+            out_type = OutputType::YAML;
+        }
+        "" | "json" => {} // Use default
+        s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
+    }
+
+    let out_path_key: v8::Local<v8::Value> = v8::String::new(scope, "out_path").unwrap().into();
+    let out_ext_key: v8::Local<v8::Value> = v8::String::new(scope, "out_ext").unwrap().into();
+    let maybe_out_path: v8::Local<v8::Value> = result_obj.get(scope, out_path_key).unwrap();
+    let maybe_out_ext: v8::Local<v8::Value> = result_obj.get(scope, out_ext_key).unwrap();
+
+    if maybe_out_path.is_string() && maybe_out_ext.is_string() {
+        return Err(anyhow!(
+            "OutData object can only have at most one of out_path or out_ext set, but not both"
+        ));
+    } else if maybe_out_path.is_string() {
+        let out_path_local: v8::Local<v8::String> = maybe_out_path.try_into()?;
+        out_path = Some(out_path_local.to_rust_string_lossy(scope));
+        out_ext = None;
+    } else if maybe_out_ext.is_string() {
+        let out_ext_local: v8::Local<v8::String> = maybe_out_ext.try_into()?;
+        out_ext = Some(out_ext_local.to_rust_string_lossy(scope));
+        out_path = None;
+    }
+
+    let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
+    Ok((
+        out_path,
+        out_ext,
+        out_type,
+        result_obj.get(scope, out_data_key).unwrap().try_into()?,
+    ))
+}
+
+// Checks whether the result from the main function is a JS OutData object from senc.js. It is a JS
+// OutData object if it is an Object and it has the `__is_senc_out_data` method.
+fn result_is_sencjs_out_data(
     scope: &mut v8::HandleScope,
     result_local: v8::Local<v8::Value>,
 ) -> Result<bool> {
@@ -252,7 +305,9 @@ fn result_is_senc_out_data(
     return Ok(result_obj.has(scope, is_senc_out_data_key).unwrap());
 }
 
-fn result_is_senc_out_data_array(
+// Checks whether the result from the main function is a JS OutDataArray object from senc.js. It is
+// a JS OutDataArray object if it is an Array and it has the `__is_senc_out_data_array` method.
+fn result_is_sencjs_out_data_array(
     scope: &mut v8::HandleScope,
     result_local: v8::Local<v8::Value>,
 ) -> Result<bool> {
@@ -268,6 +323,41 @@ fn result_is_senc_out_data_array(
     return Ok(result_arr.has(scope, is_senc_out_data_array_key).unwrap());
 }
 
+// Write the results of a single out data to disk. The output file path is determined by whether
+// the OutData object sets an `out_path` or not:
+//
+// If `out_path` is set:
+// - This will write directly to `out_path`. `out_path` is expected to be a path relative to the main
+//   script dir in the out dir.
+//
+//   Since this is confusing, here is an example. If the project tree is:
+//
+//   out
+//   example
+//   ├── foo
+//   │   └── bar
+//   │       └── baz
+//   │           └── main.sen.js
+//   └── carol
+//       └── main.sen.js
+//
+//   and the project root is `./example`, while the output dir is `./out`, then:
+//   - The `out_path` for `./example/foo/bar/baz/main.sen.js` would be relative to
+//     `./out/foo/bar/baz`
+//   - The `out_path` for `./example/carol/main.sen.js` would be relative to `./out/carol`
+//
+//   Note that the `out_path` must be within the output dir. That is, while `../` is supported,
+//   you can't go up high enough to escape the output directory.
+//
+// If out_ext is set:
+// - This will write to the path joined by `out_file_stem` and `out_ext` in the output directory.
+//   `out_file_stem` is the relative path from the project root to the main script, with the
+//   `.sen.js` extension dropped.
+//
+//   In the above example for `out_path`, the output file path for
+//   `./example/foo/bar/baz/main.sen.js` will be `./out/foo/bar/baz/main.json`
+//
+// This will create all necessary directories to write the output file.
 fn write_data(out_dir: &path::Path, out_file_stem: &str, data: &OutData) -> Result<()> {
     let mut out_file_path_str = String::new();
     if let Some(out_path) = &data.out_path {
@@ -292,6 +382,8 @@ fn write_data(out_dir: &path::Path, out_file_stem: &str, data: &OutData) -> Resu
     return Ok(());
 }
 
+// Load any runtime builtin functions that are templated. These are builtins that are dynamic to
+// the context of the runtime (e.g., the path of the current main file).
 fn load_templated_builtins(ctx: &Context, req: &RunRequest) -> Result<Extension> {
     let mut hbs = handlebars::Handlebars::new();
     let staticpath_tmpl = include_str!("templated_builtins/staticpath.js.hbs");

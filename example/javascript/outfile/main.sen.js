@@ -16,7 +16,7 @@ export function main() {
   });
   l.push(d2);
   const d3 = new senc.OutData({
-    out_path: "ex/ample/main.json",
+    out_path: "ex/ample/foo.json",
     out_type: "json",
     data: { this: "ex/ample/outfile.js" },
   });
