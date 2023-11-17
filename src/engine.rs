@@ -211,15 +211,13 @@ fn load_one_result<'a>(
         result_local = rs;
     }
 
+    let deserialized_result = serde_v8::from_v8::<serde_json::Value>(scope, result_local)?;
     let data = match out_type {
-        OutputType::JSON => {
-            let deserialized_result = serde_v8::from_v8::<serde_json::Value>(scope, result_local)?;
-            serde_json::to_string(&deserialized_result)?.to_string()
-        }
-        OutputType::YAML => {
-            let deserialized_result = serde_v8::from_v8::<serde_yaml::Value>(scope, result_local)?;
-            serde_yaml::to_string(&deserialized_result)?.to_string()
-        }
+        // NOTE
+        // Both serde_json and serde_yaml have consistent outputs, so we don't need to do anything
+        // special
+        OutputType::JSON => serde_json::to_string_pretty(&deserialized_result)?.to_string(),
+        OutputType::YAML => serde_yaml::to_string(&deserialized_result)?.to_string(),
     };
     return Ok(OutData {
         out_path,
@@ -545,14 +543,47 @@ mod tests {
         assert_eq!(actual_output, expected_output);
     }
 
-    fn get_context() -> Context {
-        let node_modules_dir = Some(get_fixture_path("node_modules"));
-        let projectroot = get_fixture_path("");
-        let out_dir = get_fixture_path("");
-        Context {
-            node_modules_dir,
-            projectroot,
-            out_dir,
+    #[tokio::test]
+    async fn test_engine_json_consistent_output() {
+        let p = get_fixture_path("simple.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let first_od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(first_od_vec.len(), 1);
+        let first_od = &first_od_vec[0];
+
+        for _i in 0..100 {
+            let od_vec = run_js(&get_context(), &req)
+                .await
+                .expect("error running js");
+            assert_eq!(od_vec.len(), 1);
+            assert_eq!(od_vec[0].data, first_od.data);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_engine_yaml_consistent_output() {
+        let p = get_fixture_path("simple_yaml.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let first_od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(first_od_vec.len(), 1);
+        let first_od = &first_od_vec[0];
+
+        for _i in 0..100 {
+            let od_vec = run_js(&get_context(), &req)
+                .await
+                .expect("error running js");
+            assert_eq!(od_vec.len(), 1);
+            assert_eq!(od_vec[0].data, first_od.data);
         }
     }
 
@@ -584,6 +615,17 @@ mod tests {
         let actual_output2: serde_json::Value =
             serde_json::from_str(&d2.data).expect("error unpacking js data");
         assert_eq!(actual_output2, expected_output);
+    }
+
+    fn get_context() -> Context {
+        let node_modules_dir = Some(get_fixture_path("node_modules"));
+        let projectroot = get_fixture_path("");
+        let out_dir = get_fixture_path("");
+        Context {
+            node_modules_dir,
+            projectroot,
+            out_dir,
+        }
     }
 
     fn get_fixture_path(relpath: &str) -> path::PathBuf {
