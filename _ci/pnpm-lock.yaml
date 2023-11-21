@@ -1,0 +1,41 @@
+lockfileVersion: '6.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+devDependencies:
+  '@fensak-io/senc-schemastore-ciconfig':
+    specifier: ^0.0.6
+    version: 0.0.6
+  '@fensak-io/senc-types':
+    specifier: ^0.0.3
+    version: 0.0.3
+  prettier:
+    specifier: 3.0.3
+    version: 3.0.3
+  typescript:
+    specifier: ^5.2.2
+    version: 5.3.2
+
+packages:
+
+  /@fensak-io/senc-schemastore-ciconfig@0.0.6:
+    resolution: {integrity: sha512-L6GaQyVfZVMl3BECC+G46lSN2tlF5DS60lgUuamr0wL668vhfD8wQb4Jq/cgi+ULynABlkTzN8hIzfL/+GnKpA==}
+    dev: true
+
+  /@fensak-io/senc-types@0.0.3:
+    resolution: {integrity: sha512-+r6BYCDV4U24cLDDkYmcC2NdKLH1/lxC5MMREc/l/TZcIKFw/zOpEwG72RhTHEKgeyYurKu/qDUG1Uv15RsjJw==}
+    dev: true
+
+  /prettier@3.0.3:
+    resolution: {integrity: sha512-L/4pUDMxcNa8R/EthV08Zt42WBO4h1rarVtK0K+QJG0X187OLo7l699jWw0GKuwzkPQ//jMFA/8Xm6Fh3J/DAg==}
+    engines: {node: '>=14'}
+    hasBin: true
+    dev: true
+
+  /typescript@5.3.2:
+    resolution: {integrity: sha512-6l+RyNy7oAHDfxC4FzSJcz9vnjTKxrLpDG5M2Vu4SHRVNg6xzqZp6LYSR9zjqQTu8DU/f5xwxUdADOkbrIX2gQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+    dev: true
