@@ -13,6 +13,13 @@ use deno_core::futures::FutureExt;
 use deno_core::*;
 use log::*;
 
+// The transpile type. Determines how the code should be transpiled before loading.
+enum TranspileType {
+    No,         // No transpilation.
+    Typescript, // Transpile typescript files to javascript.
+    YAML,       // Transpile yaml files to json.
+}
+
 // The TypeScript module loader.
 // This will check to see if the file is a TypeScript file, and run those through swc to transpile
 // to JS.
@@ -89,7 +96,7 @@ impl ModuleLoader for TsModuleLoader {
             // If there is no extension, assume .ts or .js (in that order) depending on if the path
             // exists.
             let path = match orig_path.extension() {
-                Some(_) => orig_path,
+                Some(_) => orig_path.clone(),
                 None => {
                     let mut maybe_ts = orig_path.clone();
                     maybe_ts.set_extension("ts");
@@ -108,38 +115,55 @@ impl ModuleLoader for TsModuleLoader {
             // Determine what the MediaType is (this is done based on the file
             // extension) and whether transpiling is required.
             let media_type = MediaType::from_path(&path);
-            let (module_type, should_transpile) = match media_type {
+            let (module_type, transpile_type) = match media_type {
                 MediaType::JavaScript | MediaType::Mjs | MediaType::Cjs => {
-                    (ModuleType::JavaScript, false)
+                    (ModuleType::JavaScript, TranspileType::No)
                 }
-                MediaType::Jsx => (ModuleType::JavaScript, true),
+                MediaType::Jsx => (ModuleType::JavaScript, TranspileType::Typescript),
                 MediaType::TypeScript
                 | MediaType::Mts
                 | MediaType::Cts
                 | MediaType::Dts
                 | MediaType::Dmts
                 | MediaType::Dcts
-                | MediaType::Tsx => (ModuleType::JavaScript, true),
-                MediaType::Json => (ModuleType::Json, false),
+                | MediaType::Tsx => (ModuleType::JavaScript, TranspileType::Typescript),
+                MediaType::Json => (ModuleType::Json, TranspileType::No),
                 _ => {
-                    return Err(anyhow!("Unknown extension {:?}", path.extension()));
+                    let e = Err(anyhow!("Unknown extension {:?}", path.extension()));
+                    match orig_path.extension() {
+                        Some(os_str) => {
+                            let lowercase_str = os_str.to_str().map(|s| s.to_lowercase());
+                            match lowercase_str.as_deref() {
+                                Some("yaml") | Some("yml") => {
+                                    (ModuleType::Json, TranspileType::YAML)
+                                }
+                                _ => return e,
+                            }
+                        }
+                        _ => return e,
+                    }
                 }
             };
 
             // Read the file, transpile if necessary.
             let code = fs::read_to_string(&path)?;
-            let code = if should_transpile {
-                let parsed = deno_ast::parse_module(ParseParams {
-                    specifier: module_specifier.to_string(),
-                    text_info: SourceTextInfo::from_string(code),
-                    media_type,
-                    capture_tokens: false,
-                    scope_analysis: false,
-                    maybe_syntax: None,
-                })?;
-                parsed.transpile(&Default::default())?.text
-            } else {
-                code
+            let code = match transpile_type {
+                TranspileType::No => code,
+                TranspileType::Typescript => {
+                    let parsed = deno_ast::parse_module(ParseParams {
+                        specifier: module_specifier.to_string(),
+                        text_info: SourceTextInfo::from_string(code),
+                        media_type,
+                        capture_tokens: false,
+                        scope_analysis: false,
+                        maybe_syntax: None,
+                    })?;
+                    parsed.transpile(&Default::default())?.text
+                }
+                TranspileType::YAML => {
+                    let parsed: serde_json::Value = serde_yaml::from_str(&code)?;
+                    serde_json::to_string(&parsed)?
+                }
             };
 
             // Load and return module.
