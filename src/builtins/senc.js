@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 // senc specific objects
+// - senc.OutData
+// - senc.OutDataArray
+// - senc.import_json
+// - senc.import_yaml
 
 ((globalThis) => {
   const is_senc_out_data = (a) => {
@@ -55,8 +59,16 @@
     __is_senc_out_data_array() {}
   }
 
+  // Dynamically import a file as json. This is a convenience function that provides compatibility with vanilla
+  // TypeScript so type checkers and formatters work.
+  const import_json = async (p) => {
+    return (await import(`file://${p}`, { with: { type: "json" } })).default;
+  }
+
   globalThis.senc = {
     OutData: OutData,
     OutDataArray: OutDataArray,
+    import_json: import_json,
+    import_yaml: import_json,
   };
 })(globalThis);
