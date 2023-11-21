@@ -20,17 +20,11 @@
    * This is useful to control the output behavior of the IaC objects, such as specifying the file format and extension.
    */
   class OutData {
-    /**
-     * @params out_path The path of the output file, relative to the output dir. Only one of out_path or out_ext can be
-     *                  set.
-     * @params out_ext The extension of the output file, including the preceding `.` (e.g., `.json`).
-     * @params out_type The type of the output file. Either JSON or YAML.
-     * @params data The data to output to the output file. This can be any JSON/YAML serializable object.
-     */
     constructor(attrs) {
       this.out_path = attrs.out_path;
       this.out_ext = attrs.out_ext;
       this.out_type = attrs.out_type;
+      this.out_prefix = attrs.out_prefix
       this.data = attrs.data;
     }
 

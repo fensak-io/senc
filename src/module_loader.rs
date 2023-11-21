@@ -127,7 +127,7 @@ impl ModuleLoader for TsModuleLoader {
             };
 
             // Read the file, transpile if necessary.
-            let code = std::fs::read_to_string(&path)?;
+            let code = fs::read_to_string(&path)?;
             let code = if should_transpile {
                 let parsed = deno_ast::parse_module(ParseParams {
                     specifier: module_specifier.to_string(),
@@ -167,7 +167,7 @@ fn find_node_module_specifier(
         ));
     }
 
-    let package_json_raw = std::fs::read_to_string(package_json_path)?;
+    let package_json_raw = fs::read_to_string(package_json_path)?;
     let package_json: serde_json::Value = serde_json::from_str(&package_json_raw)?;
     if package_json["module"] == serde_json::Value::Null {
         return Err(anyhow!("node package {} does not have ESM root", specifier));
