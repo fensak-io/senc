@@ -27,12 +27,19 @@ enum TranspileType {
 // TODO:
 // - Implement caching so only files that changed run through transpile.
 pub struct TsModuleLoader {
+    projectroot: path::PathBuf,
     node_modules_dir: Option<path::PathBuf>,
 }
 
 impl TsModuleLoader {
-    pub fn new(node_modules_dir: Option<path::PathBuf>) -> TsModuleLoader {
-        TsModuleLoader { node_modules_dir }
+    pub fn new(
+        projectroot: path::PathBuf,
+        node_modules_dir: Option<path::PathBuf>,
+    ) -> TsModuleLoader {
+        TsModuleLoader {
+            projectroot,
+            node_modules_dir,
+        }
     }
 
     // This resolves the given specifier as a node_modules module. Note that if the module loader
@@ -90,8 +97,19 @@ impl ModuleLoader for TsModuleLoader {
         _is_dyn_import: bool,
     ) -> pin::Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
+        let node_modules_dir = self.node_modules_dir.clone();
+        let projectroot = self.projectroot.clone();
         async move {
             let orig_path = module_specifier.to_file_path().unwrap();
+
+            if (node_modules_dir == None || !orig_path.starts_with(node_modules_dir.unwrap()))
+                && !orig_path.starts_with(projectroot)
+            {
+                return Err(anyhow!(
+                    "can not import {}: file is outside project root or node_modules directory",
+                    orig_path.to_string_lossy()
+                ));
+            }
 
             // If there is no extension, assume .ts or .js (in that order) depending on if the path
             // exists.

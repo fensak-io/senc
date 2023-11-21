@@ -104,6 +104,8 @@ async fn run_js(ctx: &Context, req: &RunRequest) -> Result<vec::Vec<OutData>> {
 
 // Initialize a new JsRuntime object (which represents an Isolate) with all the extensions loaded.
 fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
+    let modloader =
+        module_loader::TsModuleLoader::new(ctx.projectroot.clone(), ctx.node_modules_dir.clone());
     let opext = Extension {
         name: "opbuiltins",
         ops: Cow::Borrowed(&[
@@ -122,9 +124,7 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
     };
     let tmplext = load_templated_builtins(ctx, req)?;
     let opts = RuntimeOptions {
-        module_loader: Some(Rc::new(module_loader::TsModuleLoader::new(
-            ctx.node_modules_dir.clone(),
-        ))),
+        module_loader: Some(Rc::new(modloader)),
         extensions: vec![opext, tmplext],
         // NOTE
         // This snapshot contains the builtins/*.js scripts and is constructed in the build.rs
@@ -480,6 +480,17 @@ mod tests {
     #[tokio::test]
     async fn test_engine_runs_code_with_builtin_filefunctions() {
         check_single_json_output(EXPECTED_RELPATH_OUTPUT_JSON, "aws/us-east-1/vpc/main.js").await;
+    }
+
+    #[tokio::test]
+    async fn test_engine_fails_code_with_import_outside_projectroot() {
+        let p = get_fixture_path("import_restricted_to_project_root.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let result = run_js(&get_context(), &req).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
