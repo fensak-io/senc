@@ -3,6 +3,7 @@
 
 use std::borrow::{Borrow, Cow};
 use std::collections;
+use std::env;
 use std::fs;
 use std::io::Write;
 use std::path;
@@ -58,6 +59,9 @@ pub struct OutData {
     // The extension of the output file, including the preceding `.`
     // Exactly one of out_path or out_ext may be set.
     out_ext: Option<String>,
+
+    // Prefix to append to the output before writing to file.
+    out_prefix: Option<String>,
 
     // The full, raw string contents of the output file.
     data: String,
@@ -200,14 +204,16 @@ fn load_one_result<'a>(
     let mut out_path: Option<String> = None;
     let mut out_ext = Some(String::from(".json"));
     let mut out_type = OutputType::JSON;
+    let mut out_prefix: Option<String> = None;
 
     // Determine if the raw JS object from the runtime is an out data object, and if it is, process
     // it.
     if result_is_sencjs_out_data(scope, result_local)? {
-        let (op, oe, ot, rs) = load_one_sencjs_out_data_result(scope, result_local)?;
+        let (op, oe, ot, opre, rs) = load_one_sencjs_out_data_result(scope, result_local)?;
         out_path = op;
         out_ext = oe;
         out_type = ot;
+        out_prefix = opre;
         result_local = rs;
     }
 
@@ -222,6 +228,7 @@ fn load_one_result<'a>(
     return Ok(OutData {
         out_path,
         out_ext,
+        out_prefix,
         data,
     });
 }
@@ -238,12 +245,15 @@ fn load_one_sencjs_out_data_result<'a>(
     Option<String>,
     // out_type
     OutputType,
+    // out_prefix
+    Option<String>,
     // result_local
     v8::Local<'a, v8::Value>,
 )> {
     let mut out_path: Option<String> = None;
     let mut out_ext: Option<String> = None;
     let mut out_type = OutputType::JSON;
+    let mut out_prefix: Option<String> = None;
 
     let result_obj: v8::Local<v8::Object> = result_local.try_into()?;
     let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
@@ -260,8 +270,10 @@ fn load_one_sencjs_out_data_result<'a>(
 
     let out_path_key: v8::Local<v8::Value> = v8::String::new(scope, "out_path").unwrap().into();
     let out_ext_key: v8::Local<v8::Value> = v8::String::new(scope, "out_ext").unwrap().into();
+    let out_prefix_key: v8::Local<v8::Value> = v8::String::new(scope, "out_prefix").unwrap().into();
     let maybe_out_path: v8::Local<v8::Value> = result_obj.get(scope, out_path_key).unwrap();
     let maybe_out_ext: v8::Local<v8::Value> = result_obj.get(scope, out_ext_key).unwrap();
+    let maybe_out_prefix: v8::Local<v8::Value> = result_obj.get(scope, out_prefix_key).unwrap();
 
     if maybe_out_path.is_string() && maybe_out_ext.is_string() {
         return Err(anyhow!(
@@ -277,11 +289,17 @@ fn load_one_sencjs_out_data_result<'a>(
         out_path = None;
     }
 
+    if maybe_out_prefix.is_string() {
+        let out_prefix_local: v8::Local<v8::String> = maybe_out_prefix.try_into()?;
+        out_prefix = Some(out_prefix_local.to_rust_string_lossy(scope));
+    }
+
     let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
     Ok((
         out_path,
         out_ext,
         out_type,
+        out_prefix,
         result_obj.get(scope, out_data_key).unwrap().try_into()?,
     ))
 }
@@ -375,7 +393,12 @@ fn write_data(out_dir: &path::Path, out_file_stem: &str, data: &OutData) -> Resu
     let out_file_dir = out_file_path.parent().unwrap();
     fs::create_dir_all(out_file_dir)?;
     let mut f = fs::File::create(out_file_path)?;
-    f.write_all(data.data.as_bytes())?;
+
+    let mut tmp = data.data.clone();
+    if let Some(pre) = &data.out_prefix {
+        tmp.insert_str(0, &pre);
+    };
+    f.write_all(tmp.as_bytes())?;
 
     return Ok(());
 }
@@ -446,6 +469,7 @@ mod tests {
 
         assert_eq!(od.out_path, None);
         assert_eq!(od.out_ext, Some(String::from(".json")));
+        assert_eq!(od.out_prefix, None);
         let actual_output: serde_json::Value =
             serde_json::from_str(&od.data).expect("error unpacking js data");
         assert_eq!(actual_output, expected_output);
@@ -469,6 +493,7 @@ mod tests {
 
         assert_eq!(od.out_path, None);
         assert_eq!(od.out_ext, Some(String::from(".json")));
+        assert_eq!(od.out_prefix, None);
         let actual_output: serde_json::Value =
             serde_json::from_str(&od.data).expect("error unpacking js data");
         assert_eq!(actual_output, expected_output);
@@ -492,6 +517,7 @@ mod tests {
 
         assert_eq!(od.out_path, None);
         assert_eq!(od.out_ext, Some(String::from(".json")));
+        assert_eq!(od.out_prefix, None);
         let actual_output: serde_json::Value =
             serde_json::from_str(&od.data).expect("error unpacking js data");
         assert_eq!(actual_output, expected_output);
@@ -515,6 +541,7 @@ mod tests {
 
         assert_eq!(od.out_path, None);
         assert_eq!(od.out_ext, Some(String::from(".json")));
+        assert_eq!(od.out_prefix, None);
         let actual_output: serde_json::Value =
             serde_json::from_str(&od.data).expect("error unpacking js data");
         assert_eq!(actual_output, expected_output);
@@ -538,6 +565,7 @@ mod tests {
 
         assert_eq!(od.out_path, None);
         assert_eq!(od.out_ext, Some(String::from(".yml")));
+        assert_eq!(od.out_prefix, None);
         let actual_output: serde_json::Value =
             serde_yaml::from_str(&od.data).expect("error unpacking js data");
         assert_eq!(actual_output, expected_output);
@@ -605,16 +633,56 @@ mod tests {
         let d1 = &od_vec[0];
         assert_eq!(d1.out_path, None);
         assert_eq!(d1.out_ext, Some(String::from(".yml")));
+        assert_eq!(d1.out_prefix, None);
         let actual_output1: serde_json::Value =
-            serde_yaml::from_str(&d1.data).expect("error unpacking js data");
+            serde_yaml::from_str(&d1.data).expect("error unpacking yml data");
         assert_eq!(actual_output1, expected_output);
 
         let d2 = &od_vec[1];
         assert_eq!(d2.out_path, None);
         assert_eq!(d2.out_ext, Some(String::from(".json")));
+        assert_eq!(d2.out_prefix, None);
         let actual_output2: serde_json::Value =
             serde_json::from_str(&d2.data).expect("error unpacking js data");
         assert_eq!(actual_output2, expected_output);
+    }
+
+    #[tokio::test]
+    async fn test_engine_prepends_prefix_if_set() {
+        let p = get_fixture_path("outfile_prefix.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let mut od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+
+        let d = &mut od_vec[0];
+        assert_eq!(d.out_prefix, Some(String::from("# this is a prefix\n")));
+
+        // Write the out data to a temp file
+        let temp_dir = env::temp_dir();
+        let file_name = format!("{}.yml", uuid::Uuid::new_v4());
+        let outf = temp_dir.join(&file_name);
+        d.out_ext = None;
+        d.out_path = Some(String::from(&file_name));
+        write_data(&temp_dir, &outf.to_string_lossy(), d).expect("could not save output to disk");
+
+        let do_steps = || -> Result<()> {
+            // ... and confirm prefix is prepended to output.
+            let code = fs::read_to_string(&outf).expect("did not write to output file");
+            if !code.starts_with("# this is a prefix\n") {
+                Err(anyhow!("output file does not have expected prefix"))
+            } else {
+                Ok(())
+            }
+        };
+        let step_result = do_steps();
+        // Remove the temp file before checking result.
+        fs::remove_file(outf).expect("could not remove output file");
+        let _ = step_result.expect("wrong output");
     }
 
     fn get_context() -> Context {
