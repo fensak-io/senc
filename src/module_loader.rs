@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::path;
+use std::pin;
 
 use anyhow::{anyhow, Result as AnyhowResult};
 use deno_ast::MediaType;
@@ -80,10 +81,29 @@ impl ModuleLoader for TsModuleLoader {
         module_specifier: &ModuleSpecifier,
         _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dyn_import: bool,
-    ) -> std::pin::Pin<Box<ModuleSourceFuture>> {
+    ) -> pin::Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         async move {
-            let path = module_specifier.to_file_path().unwrap();
+            let orig_path = module_specifier.to_file_path().unwrap();
+
+            // If there is no extension, assume .ts or .js (in that order) depending on if the path
+            // exists.
+            let path = match orig_path.extension() {
+                Some(_) => orig_path,
+                None => {
+                    let mut maybe_ts = orig_path.clone();
+                    maybe_ts.set_extension("ts");
+                    let mut maybe_js = orig_path.clone();
+                    maybe_js.set_extension("js");
+                    if maybe_ts.is_file() {
+                        maybe_ts
+                    } else if maybe_js.is_file() {
+                        maybe_js
+                    } else {
+                        return Err(anyhow!("{} not found", orig_path.to_string_lossy()));
+                    }
+                }
+            };
 
             // Determine what the MediaType is (this is done based on the file
             // extension) and whether transpiling is required.
