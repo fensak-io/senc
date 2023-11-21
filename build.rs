@@ -32,6 +32,7 @@ fn main() {
         cargo_manifest_dir: env!("CARGO_MANIFEST_DIR"),
         snapshot_path,
         startup_snapshot: None,
+        skip_op_registration: false,
         extensions: vec![builtins::init_ops_and_esm()],
         compression_cb: None,
         with_runtime_cb: None,
