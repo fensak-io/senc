@@ -450,101 +450,36 @@ mod tests {
     static EXPECTED_RELPATH_OUTPUT_JSON: &str =
         "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
     static EXPECTED_OUTFILE_OUTPUT_JSON: &str = "{\"this\":\"outfile.js\"}";
+    static EXPECTED_IMPORT_CONFIG_OUTPUT_JSON: &str = "{\"msg\":\"hello world\"}";
 
     #[tokio::test]
     async fn test_engine_runs_js() {
-        let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_SIMPLE_OUTPUT_JSON)
-            .expect("error unpacking simple expected output json");
-
-        let p = get_fixture_path("simple.js");
-        let req = RunRequest {
-            in_file: String::from(p.as_path().to_string_lossy()),
-            out_file_stem: String::from(""),
-        };
-        let od_vec = run_js(&get_context(), &req)
-            .await
-            .expect("error running js");
-        assert_eq!(od_vec.len(), 1);
-        let od = &od_vec[0];
-
-        assert_eq!(od.out_path, None);
-        assert_eq!(od.out_ext, Some(String::from(".json")));
-        assert_eq!(od.out_prefix, None);
-        let actual_output: serde_json::Value =
-            serde_json::from_str(&od.data).expect("error unpacking js data");
-        assert_eq!(actual_output, expected_output);
+        check_single_json_output(EXPECTED_SIMPLE_OUTPUT_JSON, "simple.js").await;
     }
 
     #[tokio::test]
     async fn test_engine_runs_ts() {
-        let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_SIMPLE_OUTPUT_JSON)
-            .expect("error unpacking simple expected output json");
+        check_single_json_output(EXPECTED_SIMPLE_OUTPUT_JSON, "simple.ts").await;
+    }
 
-        let p = get_fixture_path("simple.ts");
-        let req = RunRequest {
-            in_file: String::from(p.as_path().to_string_lossy()),
-            out_file_stem: String::from(""),
-        };
-        let od_vec = run_js(&get_context(), &req)
-            .await
-            .expect("error running js");
-        assert_eq!(od_vec.len(), 1);
-        let od = &od_vec[0];
+    #[tokio::test]
+    async fn test_engine_runs_code_with_config_json_import() {
+        check_single_json_output(EXPECTED_IMPORT_CONFIG_OUTPUT_JSON, "import_json.js").await;
+    }
 
-        assert_eq!(od.out_path, None);
-        assert_eq!(od.out_ext, Some(String::from(".json")));
-        assert_eq!(od.out_prefix, None);
-        let actual_output: serde_json::Value =
-            serde_json::from_str(&od.data).expect("error unpacking js data");
-        assert_eq!(actual_output, expected_output);
+    #[tokio::test]
+    async fn test_engine_runs_code_with_config_yaml_import() {
+        check_single_json_output(EXPECTED_IMPORT_CONFIG_OUTPUT_JSON, "import_yaml.js").await;
     }
 
     #[tokio::test]
     async fn test_engine_runs_code_with_node_modules() {
-        let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_LODASH_OUTPUT_JSON)
-            .expect("error unpacking lodash expected output json");
-
-        let p = get_fixture_path("with_lodash.js");
-        let req = RunRequest {
-            in_file: String::from(p.as_path().to_string_lossy()),
-            out_file_stem: String::from(""),
-        };
-        let od_vec = run_js(&get_context(), &req)
-            .await
-            .expect("error running js");
-        assert_eq!(od_vec.len(), 1);
-        let od = &od_vec[0];
-
-        assert_eq!(od.out_path, None);
-        assert_eq!(od.out_ext, Some(String::from(".json")));
-        assert_eq!(od.out_prefix, None);
-        let actual_output: serde_json::Value =
-            serde_json::from_str(&od.data).expect("error unpacking js data");
-        assert_eq!(actual_output, expected_output);
+        check_single_json_output(EXPECTED_LODASH_OUTPUT_JSON, "with_lodash.js").await;
     }
 
     #[tokio::test]
     async fn test_engine_runs_code_with_builtin_filefunctions() {
-        let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_RELPATH_OUTPUT_JSON)
-            .expect("error unpacking relpath output json");
-
-        let p = get_fixture_path("aws/us-east-1/vpc/main.js");
-        let req = RunRequest {
-            in_file: String::from(p.as_path().to_string_lossy()),
-            out_file_stem: String::from(""),
-        };
-        let od_vec = run_js(&get_context(), &req)
-            .await
-            .expect("error running js");
-        assert_eq!(od_vec.len(), 1);
-        let od = &od_vec[0];
-
-        assert_eq!(od.out_path, None);
-        assert_eq!(od.out_ext, Some(String::from(".json")));
-        assert_eq!(od.out_prefix, None);
-        let actual_output: serde_json::Value =
-            serde_json::from_str(&od.data).expect("error unpacking js data");
-        assert_eq!(actual_output, expected_output);
+        check_single_json_output(EXPECTED_RELPATH_OUTPUT_JSON, "aws/us-east-1/vpc/main.js").await;
     }
 
     #[tokio::test]
@@ -683,6 +618,29 @@ mod tests {
         // Remove the temp file before checking result.
         fs::remove_file(outf).expect("could not remove output file");
         let _ = step_result.expect("wrong output");
+    }
+
+    async fn check_single_json_output(output_json_str: &str, fixture_fname: &str) {
+        let expected_output: serde_json::Value =
+            serde_json::from_str(output_json_str).expect("error unpacking expected output json");
+
+        let p = get_fixture_path(fixture_fname);
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let od_vec = run_js(&get_context(), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+        let od = &od_vec[0];
+
+        assert_eq!(od.out_path, None);
+        assert_eq!(od.out_ext, Some(String::from(".json")));
+        assert_eq!(od.out_prefix, None);
+        let actual_output: serde_json::Value =
+            serde_json::from_str(&od.data).expect("error unpacking js data");
+        assert_eq!(actual_output, expected_output);
     }
 
     fn get_context() -> Context {
