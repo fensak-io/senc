@@ -26,6 +26,13 @@ struct Cli {
     // The path to a .sen file or folder containing .sen files for generating IaC.
     pub path: path::PathBuf,
 
+    // Top-level arg (encoded as json) to be passed as an arg to the main function.
+    #[clap(
+        long,
+        help = "Top-level arguments to pass to the main function. Each arg will be passed to the main function as a positional arg. Must be JSON encoded."
+    )]
+    pub tla: Option<Vec<String>>,
+
     // The logging level (one of trace, debug, info, warn, error).
     #[clap(
         short='l',
@@ -107,6 +114,7 @@ fn main() -> Result<()> {
         node_modules_dir,
         projectroot,
         out_dir,
+        tla_jsons: args.tla,
     };
     let mut pool = threadpool::ThreadPool::new(ctx, args.parallelism, has_quit.clone());
     let hq = has_quit.clone();
