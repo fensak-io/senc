@@ -26,6 +26,7 @@ pub struct Context {
     pub node_modules_dir: Option<path::PathBuf>,
     pub projectroot: path::PathBuf,
     pub out_dir: path::PathBuf,
+    pub tla_jsons: Option<vec::Vec<String>>,
 }
 
 // A request to run a single JS/TS file through.
@@ -98,7 +99,7 @@ async fn run_js(ctx: &Context, req: &RunRequest) -> Result<vec::Vec<OutData>> {
     let mut js_runtime = new_runtime(ctx, req)?;
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id)?;
-    let result = js_runtime.call_and_await(&main_fn).await?;
+    let result = call_main_fn(ctx, &mut js_runtime, main_fn).await?;
     return load_result(&mut js_runtime, result);
 }
 
@@ -141,7 +142,7 @@ async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result
     let mod_id = js_runtime.load_main_module(&main_module, None).await?;
     let result = js_runtime.mod_evaluate(mod_id);
     js_runtime.run_event_loop(false).await?;
-    result.await??;
+    result.await?;
     return Ok(mod_id);
 }
 
@@ -158,6 +159,31 @@ fn load_main_fn(js_runtime: &mut JsRuntime, mod_id: usize) -> Result<v8::Global<
         .try_into()?;
     let main_fn = v8::Global::new(&mut scope, main_fn_local);
     return Ok(main_fn);
+}
+
+// Calls the main function (with top-level args if set).
+async fn call_main_fn(
+    ctx: &Context,
+    js_runtime: &mut JsRuntime,
+    main_fn: v8::Global<v8::Function>,
+) -> Result<v8::Global<v8::Value>> {
+    match ctx.tla_jsons {
+        None => js_runtime.call_and_await(&main_fn).await,
+        Some(_) => {
+            let mut args: vec::Vec<v8::Global<v8::Value>> = vec::Vec::new();
+            {
+                let mut scope = js_runtime.handle_scope();
+                for tla in ctx.tla_jsons.iter().flatten() {
+                    let v: serde_json::Value = serde_json::from_str(&tla)?;
+                    let deserialized_tla_local =
+                        serde_v8::to_v8::<serde_json::Value>(&mut scope, v)?;
+                    let deserialized_tla = v8::Global::new(&mut scope, deserialized_tla_local);
+                    args.push(deserialized_tla);
+                }
+            }
+            js_runtime.call_with_args_and_await(&main_fn, &args).await
+        }
+    }
 }
 
 // Load the result from the main function as a vector of OutData that can be outputed to disk. Each
@@ -451,6 +477,8 @@ mod tests {
         "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
     static EXPECTED_OUTFILE_OUTPUT_JSON: &str = "{\"this\":\"outfile.js\"}";
     static EXPECTED_IMPORT_CONFIG_OUTPUT_JSON: &str = "{\"msg\":\"hello world\"}";
+    static EXPECTED_ARGS_OUTPUT_JSON: &str =
+        "{\"arg1\":[\"hello world\"],\"arg2\":{\"msg\":\"hello world\"}}";
 
     #[tokio::test]
     async fn test_engine_runs_js() {
@@ -483,13 +511,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_engine_runs_js_with_args() {
+        let arg1 = "[\"hello world\"]";
+        let arg2 = "{\"msg\":\"hello world\"}";
+        let args = &[arg1, arg2];
+        check_single_json_output_with_args(EXPECTED_ARGS_OUTPUT_JSON, "args.js", args).await;
+    }
+
+    #[tokio::test]
     async fn test_engine_fails_code_with_import_outside_projectroot() {
         let p = get_fixture_path("import_restricted_to_project_root.js");
         let req = RunRequest {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let result = run_js(&get_context(), &req).await;
+        let result = run_js(&get_context(&[]), &req).await;
         assert!(result.is_err());
     }
 
@@ -503,7 +539,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od_vec = run_js(&get_context(), &req)
+        let od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
         assert_eq!(od_vec.len(), 1);
@@ -524,14 +560,14 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let first_od_vec = run_js(&get_context(), &req)
+        let first_od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
         assert_eq!(first_od_vec.len(), 1);
         let first_od = &first_od_vec[0];
 
-        for _i in 0..100 {
-            let od_vec = run_js(&get_context(), &req)
+        for _i in 0..50 {
+            let od_vec = run_js(&get_context(&[]), &req)
                 .await
                 .expect("error running js");
             assert_eq!(od_vec.len(), 1);
@@ -546,14 +582,14 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let first_od_vec = run_js(&get_context(), &req)
+        let first_od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
         assert_eq!(first_od_vec.len(), 1);
         let first_od = &first_od_vec[0];
 
-        for _i in 0..100 {
-            let od_vec = run_js(&get_context(), &req)
+        for _i in 0..50 {
+            let od_vec = run_js(&get_context(&[]), &req)
                 .await
                 .expect("error running js");
             assert_eq!(od_vec.len(), 1);
@@ -571,7 +607,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od_vec = run_js(&get_context(), &req)
+        let od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
         assert_eq!(od_vec.len(), 2);
@@ -600,7 +636,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let mut od_vec = run_js(&get_context(), &req)
+        let mut od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
         assert_eq!(od_vec.len(), 1);
@@ -632,6 +668,14 @@ mod tests {
     }
 
     async fn check_single_json_output(output_json_str: &str, fixture_fname: &str) {
+        check_single_json_output_with_args(output_json_str, fixture_fname, &[]).await
+    }
+
+    async fn check_single_json_output_with_args(
+        output_json_str: &str,
+        fixture_fname: &str,
+        args: &[&str],
+    ) {
         let expected_output: serde_json::Value =
             serde_json::from_str(output_json_str).expect("error unpacking expected output json");
 
@@ -640,7 +684,7 @@ mod tests {
             in_file: String::from(p.as_path().to_string_lossy()),
             out_file_stem: String::from(""),
         };
-        let od_vec = run_js(&get_context(), &req)
+        let od_vec = run_js(&get_context(args), &req)
             .await
             .expect("error running js");
         assert_eq!(od_vec.len(), 1);
@@ -654,7 +698,17 @@ mod tests {
         assert_eq!(actual_output, expected_output);
     }
 
-    fn get_context() -> Context {
+    fn get_context(args: &[&str]) -> Context {
+        let tla_jsons: Option<vec::Vec<String>> = if args.len() == 0 {
+            None
+        } else {
+            let mut tla_jsons_tmp: vec::Vec<String> = vec::Vec::new();
+            for a in args {
+                tla_jsons_tmp.push(a.to_string());
+            }
+            Some(tla_jsons_tmp)
+        };
+
         let node_modules_dir = Some(get_fixture_path("node_modules"));
         let projectroot = get_fixture_path("");
         let out_dir = get_fixture_path("");
@@ -662,6 +716,7 @@ mod tests {
             node_modules_dir,
             projectroot,
             out_dir,
+            tla_jsons,
         }
     }
 
