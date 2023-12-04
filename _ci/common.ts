@@ -29,13 +29,13 @@ export const addSSHKeyStep = {
 export const addSaveCacheStep = {
   test: {
     save_cache: {
-      key: 'senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+      key: 'v1-senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
       paths: ["./target"],
     },
   },
   build: {
     save_cache: {
-      key: 'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+      key: 'v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
       paths: ["./target"],
     },
   },
@@ -44,16 +44,16 @@ export const addRestoreCacheStep = {
   test: {
     restore_cache: {
       keys: [
-        'senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
-        "senc-test-cargo-{{ arch }}-",
+        'v1-senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+        "v1-senc-test-cargo-{{ arch }}-",
       ],
     },
   },
   build: {
     restore_cache: {
       keys: [
-        'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
-        "senc-build-cargo-{{ arch }}-",
+        'v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+        "v1-senc-build-cargo-{{ arch }}-",
       ],
     },
   },
