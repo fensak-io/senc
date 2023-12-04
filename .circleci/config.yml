@@ -57,8 +57,8 @@ jobs:
     - checkout
     - restore_cache:
         keys:
-        - senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
-        - senc-test-cargo-{{ arch }}-
+        - v1-senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        - v1-senc-test-cargo-{{ arch }}-
     - run:
         name: cargo fmt check
         command: cargo fmt --check
@@ -76,7 +76,7 @@ jobs:
         name: cargo test
         command: cargo test
     - save_cache:
-        key: senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        key: v1-senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
         paths:
         - ./target
   build_linux_amd64:
@@ -89,13 +89,13 @@ jobs:
     - checkout
     - restore_cache:
         keys:
-        - senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
-        - senc-build-cargo-{{ arch }}-
+        - v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        - v1-senc-build-cargo-{{ arch }}-
     - run:
         name: build senc
         command: cargo build --release
     - save_cache:
-        key: senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        key: v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
         paths:
         - ./target
     - run:
@@ -130,13 +130,13 @@ jobs:
     - checkout
     - restore_cache:
         keys:
-        - senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
-        - senc-build-cargo-{{ arch }}-
+        - v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        - v1-senc-build-cargo-{{ arch }}-
     - run:
         name: build senc
         command: cargo build --release
     - save_cache:
-        key: senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        key: v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
         paths:
         - ./target
     - run:
@@ -173,8 +173,8 @@ jobs:
     - checkout
     - restore_cache:
         keys:
-        - senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
-        - senc-build-cargo-{{ arch }}-
+        - v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        - v1-senc-build-cargo-{{ arch }}-
     - run:
         name: install rust
         command: |2
@@ -186,7 +186,7 @@ jobs:
         name: build senc
         command: cargo build --release
     - save_cache:
-        key: senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        key: v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
         paths:
         - ./target
     - run:
@@ -230,13 +230,13 @@ jobs:
           choco install -y rust-ms
     - restore_cache:
         keys:
-        - senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
-        - senc-build-cargo-{{ arch }}-
+        - v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        - v1-senc-build-cargo-{{ arch }}-
     - run:
         name: build senc
         command: cargo build --release
     - save_cache:
-        key: senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
+        key: v1-senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}
         paths:
         - ./target
     - run:
