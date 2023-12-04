@@ -1,4 +1,4 @@
-branches: ["main"]
+branches: ["release"]
 plugins:
   - - "@semantic-release/commit-analyzer"
     - preset: angular
