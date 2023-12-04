@@ -75,7 +75,7 @@ const cfg: JSONSchemaForCircleCIConfigurationFiles = {
       steps: [
         addSSHKeyStep,
         "checkout",
-        addRestoreCacheStep,
+        addRestoreCacheStep.test,
         {
           run: {
             name: "cargo fmt check",
@@ -108,7 +108,7 @@ const cfg: JSONSchemaForCircleCIConfigurationFiles = {
             command: "cargo test",
           },
         },
-        addSaveCacheStep,
+        addSaveCacheStep.test,
       ],
     },
     build_linux_amd64: getBuildUnixJob(
