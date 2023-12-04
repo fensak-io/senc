@@ -5,6 +5,8 @@ plugins:
       releaseRules:
         - type: refactor
           release: patch
+        - type: chore
+          release: patch
         # Override default rules for pre-1.0
         - breaking: true
           release: minor
