@@ -1,0 +1,22 @@
+{
+  "name": "@fensak-io/senc-types",
+  "version": "0.0.4",
+  "author": "Fensak, LLC <info@fensak.io> (https://fensak.io)",
+  "license": "MPL-2.0",
+  "description": "Core type definitions for senc.",
+  "homepage": "https://github.com/fensak-io/senc-types#readme",
+  "repository": "https://github.com/fensak-io/senc-types.git",
+  "bugs": {
+    "url": "https://github.com/fensak-io/senc-types/issues"
+  },
+  "types": "./index.d.ts",
+  "scripts": {
+    "fmt": "prettier -w .",
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "prettier": "3.0.3",
+    "semantic-release": "^22.0.5"
+  }
+}

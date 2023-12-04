@@ -50,7 +50,7 @@ fn run_requests_from_file(
     }
 
     let in_file = String::from(fpath_str);
-    let out_file_stem = get_out_file_stem(file_path, outdir, projectroot).unwrap();
+    let out_file_stem = get_out_file_stem(file_path, outdir, projectroot)?;
 
     let mut reqs = Vec::with_capacity(1);
     reqs.push(engine::RunRequest {
@@ -72,9 +72,9 @@ fn run_requests_from_dir(
         .filter(|e| !e.file_type().is_dir())
         .filter(|e| FIND_SEN_RE.is_match(&e.file_name().to_string_lossy()))
     {
-        let file_path = fs::canonicalize(entry.path()).unwrap();
+        let file_path = fs::canonicalize(entry.path())?;
         let in_file = String::from(file_path.to_string_lossy());
-        let out_file_stem = get_out_file_stem(file_path.as_path(), outdir, projectroot).unwrap();
+        let out_file_stem = get_out_file_stem(file_path.as_path(), outdir, projectroot)?;
         reqs.push(engine::RunRequest {
             in_file,
             out_file_stem,
@@ -83,7 +83,10 @@ fn run_requests_from_dir(
     return Ok(reqs);
 }
 
-fn assert_file_path_in_projectroot(file_path: &path::Path, projectroot: &path::Path) -> Result<()> {
+pub fn assert_file_path_in_projectroot(
+    file_path: &path::Path,
+    projectroot: &path::Path,
+) -> Result<()> {
     if file_path == projectroot {
         return Ok(());
     }
@@ -116,7 +119,7 @@ fn get_out_file_stem(
 
     // Construct the output file stem
     let file_dir = file_path.parent().unwrap();
-    let out_file_dir = outdir.join(file_dir.strip_prefix(projectroot).unwrap());
+    let out_file_dir = outdir.join(file_dir.strip_prefix(projectroot)?);
     return Ok(String::from(
         out_file_dir.join(fname_stem).to_string_lossy(),
     ));

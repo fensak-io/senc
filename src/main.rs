@@ -26,6 +26,13 @@ struct Cli {
     // The path to a .sen file or folder containing .sen files for generating IaC.
     pub path: path::PathBuf,
 
+    // Top-level arg (encoded as json) to be passed as an arg to the main function.
+    #[clap(
+        long,
+        help = "Top-level arguments to pass to the main function. Each arg will be passed to the main function as a positional arg. Must be JSON encoded."
+    )]
+    pub tla: Option<Vec<String>>,
+
     // The logging level (one of trace, debug, info, warn, error).
     #[clap(
         short='l',
@@ -78,13 +85,13 @@ fn main() -> Result<()> {
     let args = Cli::parse();
     logger::init(&args.loglevel, args.no_color);
 
-    let fpath = fs::canonicalize(&args.path).unwrap();
-    let projectroot = fs::canonicalize(&args.projectroot).unwrap();
-    let outdir = match fs::canonicalize(&args.outdir) {
+    let fpath = fs::canonicalize(&args.path)?;
+    let projectroot = fs::canonicalize(&args.projectroot)?;
+    let out_dir = match fs::canonicalize(&args.outdir) {
         Ok(d) => d,
         Err(_e) => {
             fs::create_dir_all(&args.outdir)?;
-            fs::canonicalize(&args.outdir).unwrap()
+            fs::canonicalize(&args.outdir)?
         }
     };
 
@@ -99,16 +106,17 @@ fn main() -> Result<()> {
 
     engine::init_v8();
 
-    let requests = files::get_run_requests_from_path(&fpath, &outdir, &projectroot)
+    let requests = files::get_run_requests_from_path(&fpath, &out_dir, &projectroot)
         .with_context(|| format!("could not collect files to execute"))?;
 
     let has_quit = Arc::new(atomic::AtomicBool::new(false));
-    let mut pool = threadpool::ThreadPool::new(
+    let ctx = engine::Context {
         node_modules_dir,
         projectroot,
-        args.parallelism,
-        has_quit.clone(),
-    );
+        out_dir,
+        tla_jsons: args.tla,
+    };
+    let mut pool = threadpool::ThreadPool::new(ctx, args.parallelism, has_quit.clone());
     let hq = has_quit.clone();
     ctrlc::set_handler(move || {
         if hq.load(atomic::Ordering::SeqCst) {
@@ -122,7 +130,7 @@ fn main() -> Result<()> {
     .expect("Error setting Ctrl-C handler");
 
     for r in requests {
-        pool.run(r);
+        pool.run(r)?;
     }
     pool.wait()
         .with_context(|| format!("could not run all files"))?;

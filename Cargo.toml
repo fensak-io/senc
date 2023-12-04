@@ -16,11 +16,12 @@ anyhow = "1.0.75"
 clap = { version = "4.0", features = ["derive"] }
 ctrlc = "3.4.1"
 deno_ast = { version = "0.31.3", features = ["transpiling"] }
-deno_core = "0.229.0"
+deno_core = "0.233.0"
 env_logger = "0.10.0"
 handlebars = "4.5.0"
 lazy_static = "1.4.0"
 log = "0.4.20"
+path-clean = "1.0.1"
 regex = "1.10.2"
 serde_yaml = "0.9.27"
 tokio = { version = "1.33.0", features = ["full"] }
@@ -28,4 +29,4 @@ uuid = { version = "1.5.0", features = ["v4"] }
 walkdir = "2.4.0"
 
 [build-dependencies]
-deno_core = "0.225.0"
+deno_core = "0.233.0"

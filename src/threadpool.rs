@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::collections::HashSet;
-use std::path;
 use std::sync::{atomic, mpsc, Arc, Mutex};
 use std::thread;
 use std::time;
@@ -32,8 +31,7 @@ impl ThreadPool {
     // |has_quit| is an Arc<AtomicBool> indicating whether the process has quit and is used to
     // gracefully shutdown the generation routine.
     pub fn new(
-        node_modules_dir: Option<path::PathBuf>,
-        projectroot: path::PathBuf,
+        context: engine::Context,
         size: usize,
         has_quit: Arc<atomic::AtomicBool>,
     ) -> ThreadPool {
@@ -53,8 +51,7 @@ impl ThreadPool {
         for _ in 0..thread_count {
             let result_sender_copy = result_sender.clone();
             workers.push(Worker::new(
-                node_modules_dir.clone(),
-                projectroot.clone(),
+                context.clone(),
                 task_mreceiver.clone(),
                 result_sender_copy,
             ));
@@ -71,14 +68,14 @@ impl ThreadPool {
     }
 
     // Send a single run request to the thread pool.
-    pub fn run(&mut self, req: engine::RunRequest) {
+    pub fn run(&mut self, req: engine::RunRequest) -> Result<()> {
         let task_id = Uuid::new_v4();
         self.task_sender
             .as_ref()
             .unwrap()
-            .send(Task { id: task_id, req })
-            .unwrap();
+            .send(Task { id: task_id, req })?;
         self.tasks.insert(task_id);
+        Ok(())
     }
 
     // Wait for all requests to finish running. This function will exit early if
@@ -143,8 +140,7 @@ impl Worker {
     // On construction, spawn the thread for the worker which watches for incoming tasks on the
     // task_receiver channel.
     fn new(
-        node_modules_dir: Option<path::PathBuf>,
-        projectroot: path::PathBuf,
+        context: engine::Context,
         task_receiver: Arc<Mutex<mpsc::Receiver<Task>>>,
         result_sender: mpsc::Sender<Uuid>,
     ) -> Worker {
@@ -165,11 +161,8 @@ impl Worker {
                         trace!("[{id}] Worker got request to run {}.", task.req);
                         debug!("executing {}", task.req.in_file);
 
-                        let ctx = engine::Context {
-                            node_modules_dir: node_modules_dir.clone(),
-                            projectroot: projectroot.clone(),
-                        };
-                        if let Err(e) = runtime.block_on(engine::run_js_and_write(&ctx, &task.req))
+                        if let Err(e) =
+                            runtime.block_on(engine::run_js_and_write(&context, &task.req))
                         {
                             error!(
                                 "could not execute javascript file `{}`: {e}",

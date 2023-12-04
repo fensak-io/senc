@@ -16,8 +16,10 @@ use deno_core::snapshot_util::{create_snapshot, CreateSnapshotOptions};
 
 extension!(
   builtins,
-  // TODO
-  // Make dynamic so it uses all files in builtins
+  // NOTE
+  // Ideally we can generate this list dynamically, but the macro is looking for the token stream
+  // [ ... ] so it can't be done.
+  // When adding to this list, make sure to update the println! in the main function as well.
   js = [ dir "src/builtins", "console.js", "path.js", "senc.js" ],
   docs = "Built in functions for senc.",
 );
@@ -32,14 +34,14 @@ fn main() {
         cargo_manifest_dir: env!("CARGO_MANIFEST_DIR"),
         snapshot_path,
         startup_snapshot: None,
+        skip_op_registration: false,
         extensions: vec![builtins::init_ops_and_esm()],
         compression_cb: None,
         with_runtime_cb: None,
     });
 
     println!("cargo:rerun-if-changed=build.rs");
-    // TODO
-    // Make dynamic so it uses all files in builtins
     println!("cargo:rerun-if-changed=src/builtins/console.js");
+    println!("cargo:rerun-if-changed=src/builtins/path.js");
     println!("cargo:rerun-if-changed=src/builtins/senc.js");
 }

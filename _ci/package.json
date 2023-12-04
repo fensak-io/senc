@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "fmt": "prettier -w .",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@fensak-io/senc-schemastore-ciconfig": "^0.0.6",
+    "@fensak-io/senc-types": "^0.0.3",
+    "prettier": "3.0.3",
+    "typescript": "^5.2.2"
+  }
+}

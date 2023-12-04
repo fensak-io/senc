@@ -44,11 +44,5 @@ pub fn op_path_relpath(
 ) -> Result<String, error::AnyError> {
     let p = path::Path::new(p_str);
     let relp = p.strip_prefix(base_str)?;
-    eprintln!(
-        "WTF: ({} ; {}) => {}",
-        p.to_string_lossy(),
-        base_str,
-        relp.to_string_lossy()
-    );
     Ok(relp.to_string_lossy().to_string())
 }
