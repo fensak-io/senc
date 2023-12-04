@@ -27,17 +27,35 @@ export const addSSHKeyStep = {
   },
 };
 export const addSaveCacheStep = {
-  save_cache: {
-    key: 'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
-    paths: ["./target"],
+  test: {
+    save_cache: {
+      key: 'senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+      paths: ["./target"],
+    },
+  },
+  build: {
+    save_cache: {
+      key: 'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+      paths: ["./target"],
+    },
   },
 };
 export const addRestoreCacheStep = {
-  restore_cache: {
-    keys: [
-      'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
-      "senc-build-cargo-{{ arch }}-",
-    ],
+  test: {
+    restore_cache: {
+      keys: [
+        'senc-test-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+        "senc-test-cargo-{{ arch }}-",
+      ],
+    },
+  },
+  build: {
+    restore_cache: {
+      keys: [
+        'senc-build-cargo-{{ arch }}-{{ checksum "Cargo.lock" }}',
+        "senc-build-cargo-{{ arch }}-",
+      ],
+    },
   },
 };
 
@@ -56,13 +74,17 @@ export const executors: Record<string, Executor> = {
       xcode: "15.0.0",
     },
     resource_class: "macos.m1.medium.gen1",
+    environment: {
+      HOMEBREW_NO_AUTO_UPDATE: 1,
+    },
   },
   windows: {
     machine: {
       image: "windows-server-2022-gui:current",
     },
-    // NOTE: this is a bug in the type"
-    resource_class: "windows.large",
+    // NOTE: this is a bug in the type
+    // See https://github.com/SchemaStore/schemastore/pull/3426
+    resource_class: "windows.medium",
     shell: "powershell.exe -ExecutionPolicy Bypass",
     environment: {
       PYTHON: "C:\\Python311\\python",
@@ -71,19 +93,31 @@ export const executors: Record<string, Executor> = {
 };
 
 export function getBuildUnixJob(exec: Executor, artifactName: string): any {
+  const baseSteps: any = [addSSHKeyStep, "checkout", addRestoreCacheStep.build];
+  if (exec.macos) {
+    baseSteps.push({
+      run: {
+        name: "install rust",
+        command: `
+brew install rustup
+rustup-init -y
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$BASH_ENV"
+`,
+      },
+    });
+  }
+
   return {
     ...exec,
     steps: [
-      addSSHKeyStep,
-      "checkout",
-      addRestoreCacheStep,
+      ...baseSteps,
       {
         run: {
           name: "build senc",
           command: "cargo build --release",
         },
       },
-      addSaveCacheStep,
+      addSaveCacheStep.build,
       {
         run: {
           name: "package build artifact",
@@ -132,17 +166,20 @@ export function getBuildWindowsJob(): any {
         run: {
           name: "setup build env",
           // Switch from gnu targeted rust to msvc targeted rust
-          command: "choco uninstall -y rust && choco install -y rust-ms",
+          command: `
+choco uninstall -y rust
+choco install -y rust-ms
+`,
         },
       },
-      addRestoreCacheStep,
+      addRestoreCacheStep.build,
       {
         run: {
           name: "build senc",
           command: "cargo build --release",
         },
       },
-      addSaveCacheStep,
+      addSaveCacheStep.build,
       {
         run: {
           name: "package build artifact",
