@@ -14,6 +14,34 @@
 type-safe programming language to define and provision infrastructure, with protections that make your code easy to
 debug and test.
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+## Table of Contents
+
+- [Installation](#installation)
+  - [Release builds](#release-builds)
+  - [From source](#from-source)
+- [Usage](#usage)
+  - [Rendering json objects](#rendering-json-objects)
+  - [Customizing the rendered output](#customizing-the-rendered-output)
+  - [Rendering multiple output files](#rendering-multiple-output-files)
+- [Features](#features)
+  - [Restricted features](#restricted-features)
+  - [Builtin functions](#builtin-functions)
+  - [Types for builtins](#types-for-builtins)
+  - [NPM packages](#npm-packages)
+  - [Validating output data](#validating-output-data)
+  - [Type libraries](#type-libraries)
+- [Technology](#technology)
+- [FAQ](#faq)
+  - [What is Hermeticity?](#what-is-hermeticity)
+  - [Why `senc` over Pulumi or CDK?](#why-senc-over-pulumi-or-cdk)
+  - [Why `senc` over Terraform / OpenTofu?](#why-senc-over-terraform--opentofu)
+  - [Why the name `senc`?](#why-the-name-senc)
+- [Similar tools](#similar-tools)
+- [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Installation
 
