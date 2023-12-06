@@ -303,6 +303,7 @@ fn load_one_sencjs_out_data_result<'a>(
     match out_type_str {
         "yaml" => {
             out_type = OutputType::YAML;
+            out_ext = Some(String::from(".yaml"));
         }
         "" | "json" => {} // Use default
         s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
