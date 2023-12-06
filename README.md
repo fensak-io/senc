@@ -358,6 +358,13 @@ We publish various auto generated type libraries that can be useful
 TypeScript runtime using the [deno_core crate](https://docs.rs/crate/deno_core/latest).
 
 
+## Real world examples
+
+Fensak uses `senc` to manage CI configurations. Check out the following examples where it is used:
+
+- [senc CircleCI config](https://github.com/fensak-io/senc/tree/main/_ci)
+
+
 ## FAQ
 
 ### What is Hermeticity?
