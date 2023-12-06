@@ -7,6 +7,7 @@ mod logger;
 mod module_loader;
 mod ops;
 mod threadpool;
+mod validator;
 
 use std::fs;
 use std::path;
