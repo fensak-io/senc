@@ -16,6 +16,8 @@ use deno_core::*;
 use crate::files;
 use crate::module_loader;
 use crate::ops;
+use crate::validator;
+use crate::validator::DataSchema;
 
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
@@ -96,11 +98,14 @@ pub async fn run_js_and_write(ctx: &Context, req: &RunRequest) -> Result<()> {
 
 // Run the javascript or typescript file available at the given file path through the Deno runtime.
 async fn run_js(ctx: &Context, req: &RunRequest) -> Result<vec::Vec<OutData>> {
+    let script_path = path::Path::new(&req.in_file);
+    let script_dir = script_path.parent().unwrap();
+
     let mut js_runtime = new_runtime(ctx, req)?;
     let mod_id = load_main_module(&mut js_runtime, &req.in_file).await?;
     let main_fn = load_main_fn(&mut js_runtime, mod_id)?;
     let result = call_main_fn(ctx, &mut js_runtime, main_fn).await?;
-    return load_result(&mut js_runtime, result);
+    return load_result(&script_dir, &mut js_runtime, result);
 }
 
 // Initialize a new JsRuntime object (which represents an Isolate) with all the extensions loaded.
@@ -189,6 +194,7 @@ async fn call_main_fn(
 // Load the result from the main function as a vector of OutData that can be outputed to disk. Each
 // OutData represents a single file that should be outputed.
 fn load_result(
+    script_dir: &path::Path,
     js_runtime: &mut JsRuntime,
     result: v8::Global<v8::Value>,
 ) -> Result<vec::Vec<OutData>> {
@@ -205,11 +211,11 @@ fn load_result(
         let sz = result_arr_raw.length();
         for i in 0..sz {
             let item = result_arr_raw.get_index(&mut scope, i).unwrap();
-            let single_out = load_one_result(&mut scope, item)?;
+            let single_out = load_one_result(script_dir, &mut scope, item)?;
             out.push(single_out);
         }
     } else {
-        let single_out = load_one_result(&mut scope, result_local)?;
+        let single_out = load_one_result(script_dir, &mut scope, result_local)?;
         out.push(single_out);
     }
 
@@ -221,6 +227,7 @@ fn load_result(
 //   allows customization of the output behavior on a file by file basis.
 // - Anything else would be treated as raw object to be serialized to JSON.
 fn load_one_result<'a>(
+    script_dir: &path::Path,
     scope: &mut v8::HandleScope<'a>,
     orig_result_local: v8::Local<'a, v8::Value>,
 ) -> Result<OutData> {
@@ -231,19 +238,23 @@ fn load_one_result<'a>(
     let mut out_ext = Some(String::from(".json"));
     let mut out_type = OutputType::JSON;
     let mut out_prefix: Option<String> = None;
+    let mut schema_path: Option<String> = None;
 
     // Determine if the raw JS object from the runtime is an out data object, and if it is, process
     // it.
     if result_is_sencjs_out_data(scope, result_local)? {
-        let (op, oe, ot, opre, rs) = load_one_sencjs_out_data_result(scope, result_local)?;
+        let (op, oe, ot, opre, sp, rs) = load_one_sencjs_out_data_result(scope, result_local)?;
         out_path = op;
         out_ext = oe;
         out_type = ot;
         out_prefix = opre;
+        schema_path = sp;
         result_local = rs;
     }
 
     let deserialized_result = serde_v8::from_v8::<serde_json::Value>(scope, result_local)?;
+    validate_result(script_dir, schema_path, &deserialized_result)?;
+
     let data = match out_type {
         // NOTE
         // Both serde_json and serde_yaml have consistent outputs, so we don't need to do anything
@@ -273,13 +284,16 @@ fn load_one_sencjs_out_data_result<'a>(
     OutputType,
     // out_prefix
     Option<String>,
+    // schema_path
+    Option<String>,
     // result_local
     v8::Local<'a, v8::Value>,
 )> {
     let mut out_path: Option<String> = None;
-    let mut out_ext: Option<String> = None;
+    let mut out_ext: Option<String> = Some(String::from(".json"));
     let mut out_type = OutputType::JSON;
     let mut out_prefix: Option<String> = None;
+    let mut schema_path: Option<String> = None;
 
     let result_obj: v8::Local<v8::Object> = result_local.try_into()?;
     let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
@@ -297,9 +311,12 @@ fn load_one_sencjs_out_data_result<'a>(
     let out_path_key: v8::Local<v8::Value> = v8::String::new(scope, "out_path").unwrap().into();
     let out_ext_key: v8::Local<v8::Value> = v8::String::new(scope, "out_ext").unwrap().into();
     let out_prefix_key: v8::Local<v8::Value> = v8::String::new(scope, "out_prefix").unwrap().into();
+    let schema_path_key: v8::Local<v8::Value> =
+        v8::String::new(scope, "schema_path").unwrap().into();
     let maybe_out_path: v8::Local<v8::Value> = result_obj.get(scope, out_path_key).unwrap();
     let maybe_out_ext: v8::Local<v8::Value> = result_obj.get(scope, out_ext_key).unwrap();
     let maybe_out_prefix: v8::Local<v8::Value> = result_obj.get(scope, out_prefix_key).unwrap();
+    let maybe_schema_path: v8::Local<v8::Value> = result_obj.get(scope, schema_path_key).unwrap();
 
     if maybe_out_path.is_string() && maybe_out_ext.is_string() {
         return Err(anyhow!(
@@ -320,12 +337,18 @@ fn load_one_sencjs_out_data_result<'a>(
         out_prefix = Some(out_prefix_local.to_rust_string_lossy(scope));
     }
 
+    if maybe_schema_path.is_string() {
+        let schema_path_local: v8::Local<v8::String> = maybe_schema_path.try_into()?;
+        schema_path = Some(schema_path_local.to_rust_string_lossy(scope));
+    }
+
     let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
     Ok((
         out_path,
         out_ext,
         out_type,
         out_prefix,
+        schema_path,
         result_obj.get(scope, out_data_key).unwrap().try_into()?,
     ))
 }
@@ -464,6 +487,26 @@ fn load_templated_builtins(ctx: &Context, req: &RunRequest) -> Result<Extension>
     Ok(ext)
 }
 
+// Validate the result data against a specified schema. If no schema is specified, this function
+// does nothing.
+fn validate_result(
+    script_dir: &path::Path,
+    maybe_schema_path: Option<String>,
+    result: &serde_json::Value,
+) -> Result<()> {
+    let schema_path_str = match maybe_schema_path {
+        None => {
+            return Ok(());
+        }
+        Some(d) => d,
+    };
+    let mut schema_path = path::PathBuf::from(script_dir);
+    schema_path.push(schema_path_str);
+    let schema_path_abs = fs::canonicalize(schema_path)?;
+    let schema = validator::new_from_path(schema_path_abs.as_path())?;
+    return schema.validate(result);
+}
+
 // Test cases
 
 #[cfg(test)]
@@ -479,6 +522,7 @@ mod tests {
     static EXPECTED_IMPORT_CONFIG_OUTPUT_JSON: &str = "{\"msg\":\"hello world\"}";
     static EXPECTED_ARGS_OUTPUT_JSON: &str =
         "{\"arg1\":[\"hello world\"],\"arg2\":{\"msg\":\"hello world\"}}";
+    static EXPECTED_JSONSCHEMA_OUTPUT_JSON: &str = "{\"productId\":5}";
 
     #[tokio::test]
     async fn test_engine_runs_js() {
@@ -508,6 +552,22 @@ mod tests {
     #[tokio::test]
     async fn test_engine_runs_code_with_builtin_filefunctions() {
         check_single_json_output(EXPECTED_RELPATH_OUTPUT_JSON, "aws/us-east-1/vpc/main.js").await;
+    }
+
+    #[tokio::test]
+    async fn test_engine_checks_schema_pass() {
+        check_single_json_output(EXPECTED_JSONSCHEMA_OUTPUT_JSON, "jsonschema/pass.js").await;
+    }
+
+    #[tokio::test]
+    async fn test_engine_checks_schema_fail() {
+        let p = get_fixture_path("jsonschema/fail.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let result = run_js(&get_context(&[]), &req).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
