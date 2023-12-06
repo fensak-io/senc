@@ -119,6 +119,7 @@ declare namespace senc {
       out_ext?: string;
       out_type: "yaml" | "json";
       out_prefix?: string;
+      schema_path?: string;
       data: any;
     });
 

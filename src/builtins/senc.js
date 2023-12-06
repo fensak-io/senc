@@ -25,10 +25,12 @@
    */
   class OutData {
     constructor(attrs) {
+      this.out_type = attrs.out_type || "";
+
       this.out_path = attrs.out_path;
       this.out_ext = attrs.out_ext;
-      this.out_type = attrs.out_type;
       this.out_prefix = attrs.out_prefix
+      this.schema_path = attrs.schema_path
       this.data = attrs.data;
     }
 
