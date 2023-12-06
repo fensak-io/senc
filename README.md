@@ -243,6 +243,7 @@ some edge cases that we missed.
 `senc` ships with a few builtin functions that are available for use:
 
 **console**
+
 Console API for logging to `stderr`. You can log with different logging levels, which will be hidden depending on the
 `--loglevel` option in the CLI. The following functions are available: `console.trace`, `console.debug`, `console.info`,
 `console.warn`, `console.error`, `console.log`.
@@ -254,6 +255,7 @@ console.info("hello", "world")
 ```
 
 **path**
+
 Path API for manipulating or constructing filesystem paths. This is useful for constructing the `out_path` attribute of
 the `senc.OutData` object.
 
@@ -268,6 +270,7 @@ const r = path.rel(base, p)
 ```
 
 **senc**
+
 `senc` specific API. Exposes the following:
 
 `senc.OutData` and `senc.OutDataArray`: Custom objects for customizing output behavior.
@@ -286,6 +289,7 @@ const cfg = await senc.import_json(`${__dirname}/someconfig.json`);
 `senc.import_yaml`: Same functionality as `import_json`, only interprets the content as YAML as opposed to JSON.
 
 **constants**
+
 `senc` exposes a few constants in the global scope that are useful for constructing output paths:
 
 - `__projectroot`: The absolute path to the project root directory.
