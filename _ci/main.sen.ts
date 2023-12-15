@@ -1,7 +1,7 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-import type { JSONSchemaForCircleCIConfigurationFiles } from "@fensak-io/senc-schemastore-ciconfig";
+import type { CircleCIConfig } from "@fensak-io/senc-schemastore-ciconfig";
 
 import {
   addSSHKeyStep,
@@ -25,7 +25,7 @@ const filterReleaseBranch = {
   },
 };
 
-const cfg: JSONSchemaForCircleCIConfigurationFiles = {
+const cfg: CircleCIConfig = {
   version: 2.1,
   workflows: {
     lint_test_release: {

@@ -6,8 +6,8 @@ settings:
 
 devDependencies:
   '@fensak-io/senc-schemastore-ciconfig':
-    specifier: ^0.0.6
-    version: 0.0.6
+    specifier: ^0.0.7
+    version: 0.0.7
   '@fensak-io/senc-types':
     specifier: ^0.0.3
     version: 0.0.3
@@ -20,8 +20,8 @@ devDependencies:
 
 packages:
 
-  /@fensak-io/senc-schemastore-ciconfig@0.0.6:
-    resolution: {integrity: sha512-L6GaQyVfZVMl3BECC+G46lSN2tlF5DS60lgUuamr0wL668vhfD8wQb4Jq/cgi+ULynABlkTzN8hIzfL/+GnKpA==}
+  /@fensak-io/senc-schemastore-ciconfig@0.0.7:
+    resolution: {integrity: sha512-RnZZi11xXrLCiXMJATi2CRSY9t75SdFobtEBlAofAt8PYCCnOXWsVj9lPbcBs2Bd5vwNUQ2+/OkpYJxd5IK5Yw==}
     dev: true
 
   /@fensak-io/senc-types@0.0.3:
