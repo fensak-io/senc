@@ -15,8 +15,8 @@ name = "senc"
 anyhow = "1.0.75"
 clap = { version = "4.0", features = ["derive"] }
 ctrlc = "3.4.1"
-deno_ast = { version = "0.31.3", features = ["transpiling"] }
-deno_core = "0.233.0"
+deno_ast = { version = "0.31.6", features = ["transpiling"] }
+deno_core = "0.238.0"
 env_logger = "0.10.0"
 handlebars = "4.5.0"
 jsonschema = { version = "0.17.1", features = [ "draft202012" ] }
@@ -31,4 +31,4 @@ uuid = { version = "1.5.0", features = ["v4"] }
 walkdir = "2.4.0"
 
 [build-dependencies]
-deno_core = "0.233.0"
+deno_core = "0.238.0"
