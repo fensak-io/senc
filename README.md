@@ -10,9 +10,16 @@
 </p>
 
 [senc](https://docs.senc.sh) (seh-nn-see) is a [hermetic](https://bazel.build/basics/hermeticity)
-[TypeScript](https://www.typescriptlang.org/) interpreter for generating Infrastructure as Code (IaC). Use a familiar,
-type-safe programming language to define and provision infrastructure, with protections that make your code easy to
-debug and test.
+[TypeScript](https://www.typescriptlang.org/) interpreter for generating config files. `senc` supports generating any
+arbitrary JSON/YAML configurations, including:
+
+- CI config, like `.circleci/config.yml` or `.github/workflows`.
+- OpenTofu/Terraform configuration (in [JSON format](https://developer.hashicorp.com/terraform/language/syntax/json)).
+- Kubernetes manifests.
+
+Use a familiar, type-safe programming language to define and provision infrastructure, with protections that make your
+code easy to debug and test.
+
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
@@ -254,8 +261,8 @@ msg: "hello world"
 
 ### Restricted features
 
-`senc` aims to be a [hermetic] runtime, and thus most system related calls and environment access is disabled in the
-runtime. Specifically, the following standard JavaScript features are missing:
+`senc` aims to be a [hermetic](https://bazel.build/basics/hermeticity) runtime, and thus most system related calls and
+environment access is disabled in the runtime. Specifically, the following standard JavaScript features are missing:
 
 - Network calls (e.g., `fetch` and `XMLHttpRequest`).
 - Filesystem access (e.g., `fs`), except through imports.
@@ -377,7 +384,11 @@ object does not match the schema.
 
 ### Type libraries
 
-We publish various auto generated type libraries that can be useful
+We publish various auto generated type libraries that can be useful. Here are the officially maintained type libraries
+that we provide:
+
+- CI Configuration Files: [senc-schemastore-ciconfig](https://github.com/fensak-io/senc-schemastore-ciconfig)
+  ([NPM](https://www.npmjs.com/package/@fensak-io/senc-schemastore-ciconfig)).
 
 
 ## Technology
