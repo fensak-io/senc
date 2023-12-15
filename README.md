@@ -377,7 +377,11 @@ object does not match the schema.
 
 ### Type libraries
 
-We publish various auto generated type libraries that can be useful
+We publish various auto generated type libraries that can be useful. Here are the officially maintained type libraries
+that we provide:
+
+- CI Configuration Files: [senc-schemastore-ciconfig](https://github.com/fensak-io/senc-schemastore-ciconfig)
+  ([NPM](https://www.npmjs.com/package/@fensak-io/senc-schemastore-ciconfig)).
 
 
 ## Technology
