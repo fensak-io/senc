@@ -146,7 +146,11 @@ async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result
     let main_module = resolve_path(file_path, std::env::current_dir()?.as_path())?;
     let mod_id = js_runtime.load_main_module(&main_module, None).await?;
     let result = js_runtime.mod_evaluate(mod_id);
-    js_runtime.run_event_loop(false).await?;
+    let opts = PollEventLoopOptions {
+        wait_for_inspector: false,
+        pump_v8_message_loop: true,
+    };
+    js_runtime.run_event_loop(opts).await?;
     result.await?;
     return Ok(mod_id);
 }
@@ -173,7 +177,7 @@ async fn call_main_fn(
     main_fn: v8::Global<v8::Function>,
 ) -> Result<v8::Global<v8::Value>> {
     match ctx.tla_jsons {
-        None => js_runtime.call_and_await(&main_fn).await,
+        None => js_runtime.call(&main_fn).await,
         Some(_) => {
             let mut args: vec::Vec<v8::Global<v8::Value>> = vec::Vec::new();
             {
@@ -186,7 +190,7 @@ async fn call_main_fn(
                     args.push(deserialized_tla);
                 }
             }
-            js_runtime.call_with_args_and_await(&main_fn, &args).await
+            js_runtime.call_with_args(&main_fn, &args).await
         }
     }
 }
