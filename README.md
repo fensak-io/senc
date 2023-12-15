@@ -261,8 +261,8 @@ msg: "hello world"
 
 ### Restricted features
 
-`senc` aims to be a [hermetic] runtime, and thus most system related calls and environment access is disabled in the
-runtime. Specifically, the following standard JavaScript features are missing:
+`senc` aims to be a [hermetic](https://bazel.build/basics/hermeticity) runtime, and thus most system related calls and
+environment access is disabled in the runtime. Specifically, the following standard JavaScript features are missing:
 
 - Network calls (e.g., `fetch` and `XMLHttpRequest`).
 - Filesystem access (e.g., `fs`), except through imports.
