@@ -74,6 +74,7 @@ pub struct OutData {
 enum OutputType {
     JSON,
     YAML,
+    HCL,
 }
 
 // Initialize the v8 platform. This should be called in the main thread before any subthreads are
@@ -121,6 +122,7 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
             ops::op_log_warn::DECL,
             ops::op_log_error::DECL,
             ops::op_path_relpath::DECL,
+            ops::op_hcl_parse::DECL,
         ]),
         middleware_fn: Some(Box::new(|op| match op.name {
             "op_print" => op.disable(),
@@ -265,6 +267,7 @@ fn load_one_result<'a>(
         // special
         OutputType::JSON => serde_json::to_string_pretty(&deserialized_result)?.to_string(),
         OutputType::YAML => serde_yaml::to_string(&deserialized_result)?.to_string(),
+        OutputType::HCL => hcl::to_string(&deserialized_result)?.to_string(),
     };
     return Ok(OutData {
         out_path,
@@ -308,6 +311,10 @@ fn load_one_sencjs_out_data_result<'a>(
         "yaml" => {
             out_type = OutputType::YAML;
             out_ext = Some(String::from(".yaml"));
+        }
+        "hcl" => {
+            out_type = OutputType::HCL;
+            out_ext = Some(String::from(".hcl"));
         }
         "" | "json" => {} // Use default
         s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
@@ -547,6 +554,11 @@ mod tests {
     #[tokio::test]
     async fn test_engine_runs_code_with_config_yaml_import() {
         check_single_json_output(EXPECTED_IMPORT_CONFIG_OUTPUT_JSON, "import_yaml.js").await;
+    }
+
+    #[tokio::test]
+    async fn test_engine_runs_code_with_config_hcl_import() {
+        check_single_json_output(EXPECTED_IMPORT_CONFIG_OUTPUT_JSON, "import_hcl.js").await;
     }
 
     #[tokio::test]
