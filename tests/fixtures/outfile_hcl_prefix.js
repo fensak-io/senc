@@ -6,6 +6,16 @@ export function main() {
     out_ext: ".hcl",
     out_type: "hcl",
     out_prefix: "### this is a prefix\n#\n###\n",
-    data: { this: "outfile.js" },
+    data: {
+      "some_attr": {
+        "foo": [1, 2],
+        "bar": true
+      },
+      "some_block": {
+        "some_block_label": {
+          "attr": "value"
+        }
+      }
+    },
   })
 }
