@@ -168,18 +168,4 @@ declare namespace senc {
    * ```
    */
   function import_yaml(p: string): Promise<any>;
-
-  /**
-   * Import the given file path as a HCL object. This equivalent to loading the file from disk and parsing it using
-   * HCL.parse.
-   *
-   * NOTE:
-   * - The provided path must be an absolute path. Use `__dirname` to construct the import path.
-   * - For security purposes, this only supports importing files in the project root as configured through the senc CLI.
-   *
-   * ```js
-   * const cfg = await import_hcl(`${__dirname}/someconfig.hcl`);
-   * ```
-   */
-  function import_hcl(p: string): Promise<any>;
 }

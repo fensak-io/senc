@@ -6,7 +6,6 @@
 // - senc.OutDataArray
 // - senc.import_json
 // - senc.import_yaml
-// - senc.import_hcl
 
 ((globalThis) => {
   const is_senc_out_data = (a) => {
@@ -68,25 +67,10 @@
     return (await import(`file://${p}`, { with: { type: "json" } })).default;
   }
 
-  // Dynamically import a HCL file as json. This is a convenience function that provides compatibility with vanilla
-  // TypeScript so type checkers and formatters work.
-  const import_hcl = async (p) => {
-    //return (await import(`file://${p}`, { with: { type: "json" } })).default;
-
-    //const decoder = new TextDecoder('utf-8');
-    //const text = decoder.decode(await Deno.readFile('input.txt'));
-
-    text = await Deno.readTextFile(`file://${p}`)
-
-    //return JSON.parse(core.ops.op_hcl_parse(text));
-    return JSON.parse(globalThis.hcl.parse(text));
-  }
-
   globalThis.senc = {
     OutData: OutData,
     OutDataArray: OutDataArray,
     import_json: import_json,
     import_yaml: import_json,
-    import_hcl: import_hcl,
   };
 })(globalThis);

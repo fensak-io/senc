@@ -122,7 +122,6 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
             ops::op_log_warn::DECL,
             ops::op_log_error::DECL,
             ops::op_path_relpath::DECL,
-            ops::op_hcl_parse::DECL,
         ]),
         middleware_fn: Some(Box::new(|op| match op.name {
             "op_print" => op.disable(),
@@ -315,6 +314,10 @@ fn load_one_sencjs_out_data_result<'a>(
         "hcl" => {
             out_type = OutputType::HCL;
             out_ext = Some(String::from(".hcl"));
+        }
+        "tf" => {
+            out_type = OutputType::HCL;
+            out_ext = Some(String::from(".tf"));
         }
         "" | "json" => {} // Use default
         s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
@@ -557,11 +560,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_engine_runs_code_with_config_hcl_import() {
-        check_single_json_output(EXPECTED_IMPORT_CONFIG_OUTPUT_JSON, "import_hcl.js").await;
-    }
-
-    #[tokio::test]
     async fn test_engine_runs_code_with_node_modules() {
         check_single_json_output(EXPECTED_LODASH_OUTPUT_JSON, "with_lodash.js").await;
     }
@@ -687,7 +685,7 @@ mod tests {
         let od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
-        assert_eq!(od_vec.len(), 2);
+        assert_eq!(od_vec.len(), 4);
 
         let d1 = &od_vec[0];
         assert_eq!(d1.out_path, None);
@@ -704,6 +702,22 @@ mod tests {
         let actual_output2: serde_json::Value =
             serde_json::from_str(&d2.data).expect("error unpacking js data");
         assert_eq!(actual_output2, expected_output);
+
+        let d3: &OutData = &od_vec[2];
+        assert_eq!(d3.out_path, None);
+        assert_eq!(d3.out_ext, Some(String::from(".hcl")));
+        assert_eq!(d3.out_prefix, None);
+        let actual_output3: serde_json::Value =
+            hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output3, expected_output);
+
+        let d4: &OutData = &od_vec[3];
+        assert_eq!(d4.out_path, None);
+        assert_eq!(d4.out_ext, Some(String::from(".tf")));
+        assert_eq!(d4.out_prefix, None);
+        let actual_output4: serde_json::Value =
+            hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output4, expected_output);
     }
 
     #[tokio::test]
@@ -733,6 +747,47 @@ mod tests {
             // ... and confirm prefix is prepended to output.
             let code = fs::read_to_string(&outf).expect("did not write to output file");
             if !code.starts_with("# this is a prefix\n") {
+                Err(anyhow!("output file does not have expected prefix"))
+            } else {
+                Ok(())
+            }
+        };
+        let step_result = do_steps();
+        // Remove the temp file before checking result.
+        fs::remove_file(outf).expect("could not remove output file");
+        let _ = step_result.expect("wrong output");
+    }
+
+    #[tokio::test]
+    async fn test_engine_prepends_hcl_prefix_if_set() {
+        let p = get_fixture_path("outfile_hcl_prefix.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let mut od_vec = run_js(&get_context(&[]), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+
+        let d = &mut od_vec[0];
+        assert_eq!(
+            d.out_prefix,
+            Some(String::from("### this is a prefix\n#\n###\n"))
+        );
+
+        // Write the out data to a temp file
+        let temp_dir = env::temp_dir();
+        let file_name = format!("{}.tf", uuid::Uuid::new_v4());
+        let outf = temp_dir.join(&file_name);
+        d.out_ext = None;
+        d.out_path = Some(String::from(&file_name));
+        write_data(&temp_dir, &outf.to_string_lossy(), d).expect("could not save output to disk");
+
+        let do_steps = || -> Result<()> {
+            // ... and confirm prefix is prepended to output.
+            let code = fs::read_to_string(&outf).expect("did not write to output file");
+            if !code.starts_with("### this is a prefix\n") {
                 Err(anyhow!("output file does not have expected prefix"))
             } else {
                 Ok(())
