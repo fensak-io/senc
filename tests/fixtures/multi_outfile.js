@@ -15,5 +15,17 @@ export function main() {
     data: { this: "outfile.js" },
   });
   l.push(d2);
+  const d3 = new senc.OutData({
+    out_ext: ".hcl",
+    out_type: "hcl",
+    data: { this: "outfile.js" },
+  });
+  l.push(d3);
+  const d4 = new senc.OutData({
+    out_ext: ".tf",
+    out_type: "hcl",
+    data: { this: "outfile.js" },
+  });
+  l.push(d4);
   return l;
 }
