@@ -46,11 +46,3 @@ pub fn op_path_relpath(
     let relp = p.strip_prefix(base_str)?;
     Ok(relp.to_string_lossy().to_string())
 }
-
-#[op2(fast)]
-#[string]
-pub fn op_hcl_parse(#[string] hcl: &str) -> Result<(), error::AnyError> {
-    //let hcl_json = hcl_to_json(hcl)?;
-    let hcl_json = hcl::from_str(hcl)?;
-    Ok(hcl_json)
-}
