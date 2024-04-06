@@ -534,6 +534,8 @@ mod tests {
     static EXPECTED_RELPATH_OUTPUT_JSON: &str =
         "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
     static EXPECTED_OUTFILE_OUTPUT_JSON: &str = "{\"this\":\"outfile.js\"}";
+    static EXPECTED_OUTFILE_OUTPUT_HCL: &str =
+        "some_attr = {\nfoo = [1, 2]\nbar = true\n}\nsome_block \"some_block_label\" {\nattr = \"value\"\n}";
     static EXPECTED_IMPORT_CONFIG_OUTPUT_JSON: &str = "{\"msg\":\"hello world\"}";
     static EXPECTED_ARGS_OUTPUT_JSON: &str =
         "{\"arg1\":[\"hello world\"],\"arg2\":{\"msg\":\"hello world\"}}";
@@ -677,6 +679,9 @@ mod tests {
         let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_OUTFILE_OUTPUT_JSON)
             .expect("error unpacking outfile expected output json");
 
+        let expected_hcl_output: hcl::Value = hcl::from_str(EXPECTED_OUTFILE_OUTPUT_HCL)
+            .expect("error unpacking outfile expected output hcl");
+
         let p = get_fixture_path("multi_outfile.js");
         let req = RunRequest {
             in_file: String::from(p.as_path().to_string_lossy()),
@@ -707,17 +712,15 @@ mod tests {
         assert_eq!(d3.out_path, None);
         assert_eq!(d3.out_ext, Some(String::from(".hcl")));
         assert_eq!(d3.out_prefix, None);
-        let actual_output3: serde_json::Value =
-            hcl::from_str(&d3.data).expect("error unpacking hcl data");
-        assert_eq!(actual_output3, expected_output);
+        let actual_output3: hcl::Value = hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output3, expected_hcl_output);
 
         let d4: &OutData = &od_vec[3];
         assert_eq!(d4.out_path, None);
         assert_eq!(d4.out_ext, Some(String::from(".tf")));
         assert_eq!(d4.out_prefix, None);
-        let actual_output4: serde_json::Value =
-            hcl::from_str(&d3.data).expect("error unpacking hcl data");
-        assert_eq!(actual_output4, expected_output);
+        let actual_output4: hcl::Value = hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output4, expected_hcl_output);
     }
 
     #[tokio::test]

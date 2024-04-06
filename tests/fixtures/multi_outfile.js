@@ -18,13 +18,33 @@ export function main() {
   const d3 = new senc.OutData({
     out_ext: ".hcl",
     out_type: "hcl",
-    data: { this: "outfile.js" },
+    data: {
+      some_attr: {
+        foo: [1, 2],
+        bar: true
+      },
+      some_block: {
+        some_block_label: {
+          attr: "value"
+        }
+      }
+    },
   });
   l.push(d3);
   const d4 = new senc.OutData({
     out_ext: ".tf",
     out_type: "hcl",
-    data: { this: "outfile.js" },
+    data: {
+      some_attr: {
+        foo: [1, 2],
+        bar: true
+      },
+      some_block: {
+        some_block_label: {
+          attr: "value"
+        }
+      }
+    },
   });
   l.push(d4);
   return l;
