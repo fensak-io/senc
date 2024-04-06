@@ -515,7 +515,7 @@ Most of these require learning a new DSL that offer different advantages and tra
 advantages of using a separate DSL may be more beneficial than the cost of familiarizing yourself with a new language.
 
 The main advantage of using `senc` over these tools is that `senc` uses JavaScript and TypeScript as the implementation
-language, allowing you to use something that may be more familiar than some of the DSLs.
+language, allowing you to use something that may be more expressive and flexible than some of the DSLs.
 
 > **Note on TySON**
 >
