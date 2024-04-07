@@ -10,6 +10,8 @@ on:
     types:
       - opened
       - edited
+    branches:
+      - main
 
 permissions:
   pull-requests: write
