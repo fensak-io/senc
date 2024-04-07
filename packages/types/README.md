@@ -4,11 +4,11 @@
   <a href="https://www.npmjs.com/package/@fensak-io/senc-types">
     <img alt="NPM" src="https://img.shields.io/npm/v/@fensak-io/senc-types.svg?style=for-the-badge">
   </a>
-  <a href="https://github.com/fensak-io/senc-types/blob/main/LICENSE">
-    <img alt="LICENSE" src="https://img.shields.io/github/license/fensak-io/senc-types?style=for-the-badge">
+  <a href="https://github.com/fensak-io/senc/blob/main/LICENSE">
+    <img alt="LICENSE" src="https://img.shields.io/github/license/fensak-io/senc?style=for-the-badge">
   </a>
-  <a href="https://github.com/fensak-io/senc-types/releases/latest">
-    <img alt="latest release" src="https://img.shields.io/github/v/release/fensak-io/senc-types?style=for-the-badge">
+  <a href="https://github.com/fensak-io/senc/releases/latest">
+    <img alt="latest release" src="https://img.shields.io/github/v/release/fensak-io/senc?style=for-the-badge">
   </a>
 </p>
 
