@@ -36,7 +36,7 @@ plugins:
     - npmPublish: true
       pkgRoot: "./packages/types"
   - - "@semantic-release/git"
-    - assets: ["Cargo.toml", "Cargo.lock"]
+    - assets:
         - "Cargo.toml"
         - "Cargo.lock"
         - "./packages/types/package.json"
