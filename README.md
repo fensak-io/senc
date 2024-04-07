@@ -74,6 +74,12 @@ senc -o /path/to/output/dir /path/to/input/dir
 ```
 git clone https://github.com/fensak-io/senc.git
 cd senc
+
+# NOTE
+# This is not strictly necessary, but if you wish to have sane versions in Cargo.toml, then you will want to work off
+# the release branch.
+git switch release
+
 cargo run -- -o /path/to/output/dir /path/to/input/dir
 ```
 
@@ -531,6 +537,11 @@ For IaC specifically, there is also the following:
 As mentioned above in the FAQ, the main differentiator of `senc` compared to these tools is that it focuses solely on
 compilation and code generation, making it easy to adopt incrementally, or mix and match with current and future
 IaC runtimes.
+
+
+## Contributing
+
+Refer to our [Contribution Guide](/CONTRIBUTING.md).
 
 
 ## License

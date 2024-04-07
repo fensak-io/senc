@@ -1,6 +1,7 @@
 [package]
 name = "senc"
-version = "0.0.2"
+# NOTE: This version is maintained in the release branch only, through semantic-release.
+version = "0.0.0-dev"
 edition = "2021"
 build = "build.rs"
 
