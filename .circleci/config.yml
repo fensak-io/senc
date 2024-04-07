@@ -286,5 +286,5 @@ jobs:
           export GITHUB_APP_PRIVATE_KEY="$(echo -n "$GITHUB_APP_PRIVATE_KEY_B64" | base64 -d)"
           export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
 
-          npm install semantic-release-replace-plugin @semantic-release/git
+          npm install conventional-changelog-conventionalcommits semantic-release-replace-plugin @semantic-release/git
           npx -y semantic-release@^22.0.5
