@@ -1,9 +1,10 @@
+# Enforces the PR title follows conventional commits
+#
 # NOTE
 # Our base CI system is CircleCI, but for anything that interacts with the PR metadata works better in GHA so we use GHA
 # here.
 
 name: "Validate PR Title"
-description: "Enforces the PR title follows conventional commits."
 
 on:
   pull_request_target:
