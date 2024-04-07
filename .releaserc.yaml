@@ -16,7 +16,16 @@ plugins:
         noteKeywords:
           - BREAKING CHANGE
           - BREAKING CHANGES
-  - "@semantic-release/release-notes-generator"
+  - - "@semantic-release/release-notes-generator"
+    - preset: conventionalcommits
+      presetConfig:
+        types:
+          - type: feat
+            section: Features
+          - type: fix
+            section: Bug fixes
+          - type: chore
+            section: Other updates
   - - "semantic-release-replace-plugin"
     - replacements:
         - files: ["Cargo.toml", "Cargo.lock"]
