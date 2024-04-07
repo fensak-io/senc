@@ -14,6 +14,11 @@ import {
   outPrefix,
 } from "./common.ts";
 
+const semanticReleasePlugins = [
+  "conventional-changelog-conventionalcommits",
+  "semantic-release-replace-plugin",
+  "@semantic-release/git",
+];
 const filterMainBranches = {
   branches: {
     only: ["main", "release"],
@@ -160,7 +165,7 @@ tar -xvf github-app-token_linux_amd64.tar.gz
 export GITHUB_APP_PRIVATE_KEY="$(echo -n "$GITHUB_APP_PRIVATE_KEY_B64" | base64 -d)"
 export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
 
-npm install semantic-release-replace-plugin @semantic-release/git
+npm install ${semanticReleasePlugins.join(" ")}
 npx -y semantic-release@^22.0.5
 `,
           },
