@@ -1,6 +1,6 @@
 {
   "name": "@fensak-io/senc-types",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "author": "Fensak, LLC <info@fensak.io> (https://fensak.io)",
   "license": "MPL-2.0",
   "description": "Core type definitions for senc.",
