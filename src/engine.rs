@@ -74,6 +74,7 @@ pub struct OutData {
 enum OutputType {
     JSON,
     YAML,
+    HCL,
 }
 
 // Initialize the v8 platform. This should be called in the main thread before any subthreads are
@@ -265,6 +266,7 @@ fn load_one_result<'a>(
         // special
         OutputType::JSON => serde_json::to_string_pretty(&deserialized_result)?.to_string(),
         OutputType::YAML => serde_yaml::to_string(&deserialized_result)?.to_string(),
+        OutputType::HCL => hcl::to_string(&deserialized_result)?.to_string(),
     };
     return Ok(OutData {
         out_path,
@@ -308,6 +310,14 @@ fn load_one_sencjs_out_data_result<'a>(
         "yaml" => {
             out_type = OutputType::YAML;
             out_ext = Some(String::from(".yaml"));
+        }
+        "hcl" => {
+            out_type = OutputType::HCL;
+            out_ext = Some(String::from(".hcl"));
+        }
+        "tf" => {
+            out_type = OutputType::HCL;
+            out_ext = Some(String::from(".tf"));
         }
         "" | "json" => {} // Use default
         s => return Err(anyhow!("out_type {s} in OutData object is not supported")),
@@ -524,6 +534,8 @@ mod tests {
     static EXPECTED_RELPATH_OUTPUT_JSON: &str =
         "{\"state\":\"aws/us-east-1/vpc/terraform.tfstate\",\"mainf\":\"aws/us-east-1/vpc/main.js\"}";
     static EXPECTED_OUTFILE_OUTPUT_JSON: &str = "{\"this\":\"outfile.js\"}";
+    static EXPECTED_OUTFILE_OUTPUT_HCL: &str =
+        "some_attr = {\nfoo = [1, 2]\nbar = true\n}\nsome_block \"some_block_label\" {\nattr = \"value\"\n}";
     static EXPECTED_IMPORT_CONFIG_OUTPUT_JSON: &str = "{\"msg\":\"hello world\"}";
     static EXPECTED_ARGS_OUTPUT_JSON: &str =
         "{\"arg1\":[\"hello world\"],\"arg2\":{\"msg\":\"hello world\"}}";
@@ -667,6 +679,9 @@ mod tests {
         let expected_output: serde_json::Value = serde_json::from_str(EXPECTED_OUTFILE_OUTPUT_JSON)
             .expect("error unpacking outfile expected output json");
 
+        let expected_hcl_output: hcl::Value = hcl::from_str(EXPECTED_OUTFILE_OUTPUT_HCL)
+            .expect("error unpacking outfile expected output hcl");
+
         let p = get_fixture_path("multi_outfile.js");
         let req = RunRequest {
             in_file: String::from(p.as_path().to_string_lossy()),
@@ -675,7 +690,7 @@ mod tests {
         let od_vec = run_js(&get_context(&[]), &req)
             .await
             .expect("error running js");
-        assert_eq!(od_vec.len(), 2);
+        assert_eq!(od_vec.len(), 4);
 
         let d1 = &od_vec[0];
         assert_eq!(d1.out_path, None);
@@ -692,6 +707,20 @@ mod tests {
         let actual_output2: serde_json::Value =
             serde_json::from_str(&d2.data).expect("error unpacking js data");
         assert_eq!(actual_output2, expected_output);
+
+        let d3: &OutData = &od_vec[2];
+        assert_eq!(d3.out_path, None);
+        assert_eq!(d3.out_ext, Some(String::from(".hcl")));
+        assert_eq!(d3.out_prefix, None);
+        let actual_output3: hcl::Value = hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output3, expected_hcl_output);
+
+        let d4: &OutData = &od_vec[3];
+        assert_eq!(d4.out_path, None);
+        assert_eq!(d4.out_ext, Some(String::from(".tf")));
+        assert_eq!(d4.out_prefix, None);
+        let actual_output4: hcl::Value = hcl::from_str(&d3.data).expect("error unpacking hcl data");
+        assert_eq!(actual_output4, expected_hcl_output);
     }
 
     #[tokio::test]
@@ -721,6 +750,47 @@ mod tests {
             // ... and confirm prefix is prepended to output.
             let code = fs::read_to_string(&outf).expect("did not write to output file");
             if !code.starts_with("# this is a prefix\n") {
+                Err(anyhow!("output file does not have expected prefix"))
+            } else {
+                Ok(())
+            }
+        };
+        let step_result = do_steps();
+        // Remove the temp file before checking result.
+        fs::remove_file(outf).expect("could not remove output file");
+        let _ = step_result.expect("wrong output");
+    }
+
+    #[tokio::test]
+    async fn test_engine_prepends_hcl_prefix_if_set() {
+        let p = get_fixture_path("outfile_hcl_prefix.js");
+        let req = RunRequest {
+            in_file: String::from(p.as_path().to_string_lossy()),
+            out_file_stem: String::from(""),
+        };
+        let mut od_vec = run_js(&get_context(&[]), &req)
+            .await
+            .expect("error running js");
+        assert_eq!(od_vec.len(), 1);
+
+        let d = &mut od_vec[0];
+        assert_eq!(
+            d.out_prefix,
+            Some(String::from("### this is a prefix\n#\n###\n"))
+        );
+
+        // Write the out data to a temp file
+        let temp_dir = env::temp_dir();
+        let file_name = format!("{}.tf", uuid::Uuid::new_v4());
+        let outf = temp_dir.join(&file_name);
+        d.out_ext = None;
+        d.out_path = Some(String::from(&file_name));
+        write_data(&temp_dir, &outf.to_string_lossy(), d).expect("could not save output to disk");
+
+        let do_steps = || -> Result<()> {
+            // ... and confirm prefix is prepended to output.
+            let code = fs::read_to_string(&outf).expect("did not write to output file");
+            if !code.starts_with("### this is a prefix\n") {
                 Err(anyhow!("output file does not have expected prefix"))
             } else {
                 Ok(())
