@@ -95,16 +95,10 @@ const cfg: CircleCIConfig = {
         },
         {
           run: {
-            name: "install pnpm",
-            command:
-              "sudo corepack enable && sudo corepack prepare pnpm@latest-8 --activate",
-          },
-        },
-        {
-          run: {
             name: "install test script dependencies",
             working_directory: "./tests/fixtures",
-            command: "pnpm install",
+            command:
+              "npm exec --yes --package=pnpm@12.5.1 -- pnpm install --frozen-lockfile",
           },
         },
         {

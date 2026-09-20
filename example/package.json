@@ -2,6 +2,7 @@
   "name": "@fensak-io/senc-example",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@12.5.1",
   "dependencies": {
     "lodash-es": "^4.17.21",
     "@fensak-io/senc-tfcore": "^0.0.1",
