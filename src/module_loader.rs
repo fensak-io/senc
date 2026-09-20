@@ -1,17 +1,15 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-use std::fs;
-use std::path;
-use std::pin;
-
 use anyhow::{anyhow, Result as AnyhowResult};
 use deno_ast::MediaType;
 use deno_ast::ParseParams;
-use deno_ast::SourceTextInfo;
 use deno_core::futures::FutureExt;
 use deno_core::*;
+use deno_error::JsErrorBox;
 use log::*;
+use std::fs;
+use std::path;
 
 // The transpile type. Determines how the code should be transpiled before loading.
 enum TranspileType {
@@ -45,25 +43,20 @@ impl TsModuleLoader {
     // This resolves the given specifier as a node_modules module. Note that if the module loader
     // could not find any node modules dir in the parent tree, then this will return an error for
     // the specifier.
-    fn resolve_node_module_import(
-        &self,
-        specifier: &str,
-        referrer: &str,
-        _kind: ResolutionKind,
-        original_result: Result<ModuleSpecifier, error::AnyError>,
-    ) -> Result<ModuleSpecifier, error::AnyError> {
+    fn resolve_node_module_import(&self, specifier: &str, referrer: &str) -> ModuleResolveResponse {
         let node_modules_path = match &self.node_modules_dir {
             None => {
                 error!("no node modules dir");
-                return original_result;
+                return Err(JsErrorBox::generic("no node_modules directory found"));
             }
             Some(p) => p,
         };
 
-        let new_specifier_path = find_node_module_specifier(node_modules_path, specifier)?;
+        let new_specifier_path = find_node_module_specifier(node_modules_path, specifier)
+            .map_err(|err| JsErrorBox::generic(err.to_string()))?;
         let new_specifier = new_specifier_path.to_str().unwrap();
 
-        resolve_import(new_specifier, referrer).map_err(|e| e.into())
+        resolve_import(new_specifier, referrer).map_err(|err| JsErrorBox::generic(err.to_string()))
     }
 }
 
@@ -74,41 +67,33 @@ impl ModuleLoader for TsModuleLoader {
         &self,
         specifier: &str,
         referrer: &str,
-        kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, error::AnyError> {
-        let res: Result<ModuleSpecifier, error::AnyError> =
-            resolve_import(specifier, referrer).map_err(|e| e.into());
-        match &res {
-            Err(e) => match e.downcast_ref::<ModuleResolutionError>() {
-                Some(ModuleResolutionError::ImportPrefixMissing(_, _)) => {
-                    self.resolve_node_module_import(specifier, referrer, kind, res)
-                }
-                Some(_) => res,
-                None => res,
-            },
-            _ => res,
+        _kind: ResolutionKind,
+    ) -> ModuleResolveResponse {
+        match resolve_import(specifier, referrer) {
+            Ok(resolved) => Ok(resolved),
+            Err(_) => self.resolve_node_module_import(specifier, referrer),
         }
     }
 
     fn load(
         &self,
         module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<&ModuleSpecifier>,
-        _is_dyn_import: bool,
-    ) -> pin::Pin<Box<ModuleSourceFuture>> {
+        _maybe_referrer: Option<&ModuleLoadReferrer>,
+        _options: ModuleLoadOptions,
+    ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let node_modules_dir = self.node_modules_dir.clone();
         let projectroot = self.projectroot.clone();
-        async move {
+        let future = async move {
             let orig_path = module_specifier.to_file_path().unwrap();
 
             if (node_modules_dir == None || !orig_path.starts_with(node_modules_dir.unwrap()))
                 && !orig_path.starts_with(projectroot)
             {
-                return Err(anyhow!(
+                return Err(JsErrorBox::generic(format!(
                     "can not import {}: file is outside project root or node_modules directory",
                     orig_path.to_string_lossy()
-                ));
+                )));
             }
 
             // If there is no extension, assume .ts or .js (in that order) depending on if the path
@@ -125,7 +110,10 @@ impl ModuleLoader for TsModuleLoader {
                     } else if maybe_js.is_file() {
                         maybe_js
                     } else {
-                        return Err(anyhow!("{} not found", orig_path.to_string_lossy()));
+                        return Err(JsErrorBox::generic(format!(
+                            "{} not found",
+                            orig_path.to_string_lossy()
+                        )));
                     }
                 }
             };
@@ -147,7 +135,10 @@ impl ModuleLoader for TsModuleLoader {
                 | MediaType::Tsx => (ModuleType::JavaScript, TranspileType::Typescript),
                 MediaType::Json => (ModuleType::Json, TranspileType::No),
                 _ => {
-                    let e = Err(anyhow!("Unknown extension {:?}", path.extension()));
+                    let e = Err(JsErrorBox::generic(format!(
+                        "Unknown extension {:?}",
+                        path.extension()
+                    )));
                     match orig_path.extension() {
                         Some(os_str) => {
                             let lowercase_str = os_str.to_str().map(|s| s.to_lowercase());
@@ -164,31 +155,49 @@ impl ModuleLoader for TsModuleLoader {
             };
 
             // Read the file, transpile if necessary.
-            let code = fs::read_to_string(&path)?;
+            let code =
+                fs::read_to_string(&path).map_err(|err| JsErrorBox::generic(err.to_string()))?;
             let code = match transpile_type {
                 TranspileType::No => code,
                 TranspileType::Typescript => {
                     let parsed = deno_ast::parse_module(ParseParams {
-                        specifier: module_specifier.to_string(),
-                        text_info: SourceTextInfo::from_string(code),
+                        specifier: module_specifier.clone(),
+                        text: code.into(),
                         media_type,
                         capture_tokens: false,
                         scope_analysis: false,
                         maybe_syntax: None,
-                    })?;
-                    parsed.transpile(&Default::default())?.text
+                    })
+                    .map_err(|err| JsErrorBox::generic(err.to_string()))?;
+                    parsed
+                        .transpile(
+                            &Default::default(),
+                            &Default::default(),
+                            &Default::default(),
+                        )
+                        .map_err(|err| JsErrorBox::generic(err.to_string()))?
+                        .into_source()
+                        .text
                 }
                 TranspileType::YAML => {
-                    let parsed: serde_json::Value = serde_yaml::from_str(&code)?;
-                    serde_json::to_string(&parsed)?
+                    let parsed: serde_json::Value = serde_yaml::from_str(&code)
+                        .map_err(|err| JsErrorBox::generic(err.to_string()))?;
+                    serde_json::to_string(&parsed)
+                        .map_err(|err| JsErrorBox::generic(err.to_string()))?
                 }
             };
 
             // Load and return module.
-            let module = ModuleSource::new(module_type, FastString::from(code), &module_specifier);
+            let module = ModuleSource::new(
+                module_type,
+                ModuleSourceCode::String(FastString::from(code)),
+                &module_specifier,
+                None,
+            );
             Ok(module)
         }
-        .boxed_local()
+        .boxed_local();
+        ModuleLoadResponse::Async(future)
     }
 }
 

@@ -12,7 +12,7 @@ use std::env;
 use std::path::PathBuf;
 
 use deno_core::extension;
-use deno_core::snapshot_util::{create_snapshot, CreateSnapshotOptions};
+use deno_core::snapshot::{create_snapshot, CreateSnapshotOptions};
 
 extension!(
   builtins,
@@ -30,15 +30,19 @@ fn main() {
     let snapshot_path = o.join("SENC_SNAPSHOT.bin");
 
     // Create the snapshot.
-    let _snapshot = create_snapshot(CreateSnapshotOptions {
-        cargo_manifest_dir: env!("CARGO_MANIFEST_DIR"),
-        snapshot_path,
-        startup_snapshot: None,
-        skip_op_registration: false,
-        extensions: vec![builtins::init_ops_and_esm()],
-        compression_cb: None,
-        with_runtime_cb: None,
-    });
+    let snapshot = create_snapshot(
+        CreateSnapshotOptions {
+            cargo_manifest_dir: env!("CARGO_MANIFEST_DIR"),
+            startup_snapshot: None,
+            skip_op_registration: false,
+            extensions: vec![builtins::init()],
+            extension_transpiler: None,
+            with_runtime_cb: None,
+        },
+        None,
+    )
+    .expect("failed to create JavaScript snapshot");
+    std::fs::write(snapshot_path, snapshot.output).expect("failed to write JavaScript snapshot");
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/builtins/console.js");

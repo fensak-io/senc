@@ -3,8 +3,6 @@
 
 use std::io::Write;
 
-use log::*;
-
 pub fn init(level: &str, no_color: bool) {
     let mut logger_env = env_logger::Env::new()
         .filter("SENC_LOG")
@@ -15,28 +13,6 @@ pub fn init(level: &str, no_color: bool) {
     }
 
     env_logger::Builder::from_env(logger_env)
-        .format(|buf, record| {
-            let mut style = buf.style();
-            let level = record.level();
-            match level {
-                Level::Error => {
-                    style.set_color(env_logger::fmt::Color::Red).set_bold(true);
-                }
-                Level::Warn => {
-                    style.set_color(env_logger::fmt::Color::Yellow);
-                }
-                Level::Debug => {
-                    style.set_dimmed(true);
-                }
-                _ => {}
-            }
-
-            writeln!(
-                buf,
-                "{}: {}",
-                style.value(record.level()),
-                style.value(record.args())
-            )
-        })
+        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
         .init();
 }
