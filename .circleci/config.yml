@@ -48,7 +48,7 @@ workflows:
 jobs:
   lint_test:
     docker:
-    - image: cimg/rust:1.73-node
+    - image: cimg/rust:1.97.1-node
     resource_class: arm.large
     steps:
     - add_ssh_keys:
@@ -81,7 +81,7 @@ jobs:
         - ./target
   build_linux_amd64:
     docker:
-    - image: cimg/rust:1.73
+    - image: cimg/rust:1.97.1
     steps:
     - add_ssh_keys:
         fingerprints:
@@ -121,7 +121,7 @@ jobs:
             - senc-linux-amd64.tar.gz
   build_linux_arm64:
     docker:
-    - image: cimg/rust:1.73
+    - image: cimg/rust:1.97.1
     resource_class: arm.large
     steps:
     - add_ssh_keys:
