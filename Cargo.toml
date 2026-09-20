@@ -3,6 +3,7 @@
 name = "senc"
 version = "0.0.0-dev"
 edition = "2021"
+rust-version = "1.97.1"
 build = "build.rs"
 
 
