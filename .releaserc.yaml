@@ -42,8 +42,12 @@ plugins:
               numMatches: 1
               numReplacements: 1
   - - "@semantic-release/npm"
-    - npmPublish: true
+    - # @semantic-release/npm prepares the versioned package; staged publishing
+      # itself is performed by @semantic-release/exec below.
+      npmPublish: false
       pkgRoot: "./packages/types"
+  - - "@semantic-release/exec"
+    - publishCmd: "npm stage publish ./packages/types"
   - - "@semantic-release/git"
     - assets:
         - "Cargo.toml"
