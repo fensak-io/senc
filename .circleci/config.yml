@@ -287,5 +287,7 @@ jobs:
           # GitHub App installation tokens authenticate as the HTTP password, not username.
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/fensak-io/senc.git"
 
-          npm install conventional-changelog-conventionalcommits semantic-release-replace-plugin @semantic-release/git
+          npm install conventional-changelog-conventionalcommits semantic-release-replace-plugin @semantic-release/exec @semantic-release/git
+          export NPM_ID_TOKEN="$(circleci run oidc get --claims '{"aud":"npm:registry.npmjs.org"}')"
+          test -n "$NPM_ID_TOKEN"
           npx -y semantic-release@^25.0.9
