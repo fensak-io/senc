@@ -159,7 +159,7 @@ jobs:
             - senc-linux-arm64.tar.gz
   build_darwin_arm64:
     macos:
-      xcode: 27.2
+      xcode: '27.2'
     resource_class: m4pro.medium
     environment:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -285,4 +285,4 @@ jobs:
           export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
 
           npm install conventional-changelog-conventionalcommits semantic-release-replace-plugin @semantic-release/git
-          npx -y semantic-release@^22.0.5
+          npx -y semantic-release@^25.0.9

@@ -160,7 +160,7 @@ export GITHUB_APP_PRIVATE_KEY="$(echo -n "$GITHUB_APP_PRIVATE_KEY_B64" | base64 
 export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
 
 npm install ${semanticReleasePlugins.join(" ")}
-npx -y semantic-release@^22.0.5
+npx -y semantic-release@^25.0.9
 `,
           },
         },
