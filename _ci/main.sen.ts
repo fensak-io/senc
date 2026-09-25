@@ -158,9 +158,12 @@ tar -xvf github-app-token_linux_amd64.tar.gz
             command: `
 export GITHUB_APP_PRIVATE_KEY="$(echo -n "$GITHUB_APP_PRIVATE_KEY_B64" | base64 -d)"
 export GITHUB_TOKEN="$(/tmp/github-app-token --repo fensak-io/senc)"
+test -n "$GITHUB_TOKEN"
+# GitHub App installation tokens authenticate as the HTTP password, not username.
+git remote set-url origin "https://x-access-token:\${GITHUB_TOKEN}@github.com/fensak-io/senc.git"
 
 npm install ${semanticReleasePlugins.join(" ")}
-npx -y semantic-release@^22.0.5
+npx -y semantic-release@^25.0.9
 `,
           },
         },
