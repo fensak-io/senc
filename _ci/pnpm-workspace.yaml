@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@fensak-io/senc-schemastore-ciconfig@0.0.9'

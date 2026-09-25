@@ -48,7 +48,7 @@ workflows:
 jobs:
   lint_test:
     docker:
-    - image: cimg/rust:1.73-node
+    - image: cimg/rust:1.97.1-node
     resource_class: arm.large
     steps:
     - add_ssh_keys:
@@ -66,12 +66,9 @@ jobs:
         name: cargo build check
         command: cargo check
     - run:
-        name: install pnpm
-        command: sudo corepack enable && sudo corepack prepare pnpm@latest-8 --activate
-    - run:
         name: install test script dependencies
         working_directory: ./tests/fixtures
-        command: pnpm install
+        command: npm exec --yes --package=pnpm@12.5.1 -- pnpm install --frozen-lockfile
     - run:
         name: cargo test
         command: cargo test
@@ -81,7 +78,7 @@ jobs:
         - ./target
   build_linux_amd64:
     docker:
-    - image: cimg/rust:1.73
+    - image: cimg/rust:1.97.1
     steps:
     - add_ssh_keys:
         fingerprints:
@@ -121,7 +118,7 @@ jobs:
             - senc-linux-amd64.tar.gz
   build_linux_arm64:
     docker:
-    - image: cimg/rust:1.73
+    - image: cimg/rust:1.97.1
     resource_class: arm.large
     steps:
     - add_ssh_keys:
@@ -162,8 +159,8 @@ jobs:
             - senc-linux-arm64.tar.gz
   build_darwin_arm64:
     macos:
-      xcode: 15.0.0
-    resource_class: macos.m1.medium.gen1
+      xcode: 27.2
+    resource_class: m4pro.medium
     environment:
       HOMEBREW_NO_AUTO_UPDATE: 1
     steps:
@@ -180,8 +177,9 @@ jobs:
         command: |2
 
           brew install rustup
-          rustup-init -y
-          echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$BASH_ENV"
+          export PATH="$(brew --prefix rustup)/bin:$PATH"
+          rustup default stable
+          echo 'export PATH="$(brew --prefix rustup)/bin:$PATH"' >> "$BASH_ENV"
     - run:
         name: build senc
         command: cargo build --release
