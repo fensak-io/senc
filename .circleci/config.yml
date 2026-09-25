@@ -177,8 +177,9 @@ jobs:
         command: |2
 
           brew install rustup
-          rustup-init -y
-          echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$BASH_ENV"
+          export PATH="$(brew --prefix rustup)/bin:$PATH"
+          rustup default stable
+          echo 'export PATH="$(brew --prefix rustup)/bin:$PATH"' >> "$BASH_ENV"
     - run:
         name: build senc
         command: cargo build --release

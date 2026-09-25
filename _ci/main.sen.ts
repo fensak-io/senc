@@ -1,7 +1,7 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-import type { CircleCIConfig } from "@fensak-io/senc-schemastore-ciconfig";
+import type { CircleCIConfig } from "@fensak-io/senc-schemastore-ciconfig/circleci";
 
 import {
   addSSHKeyStep,

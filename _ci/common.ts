@@ -1,11 +1,6 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  DockerExecutor,
-  MacosExecutor,
-  MachineExecutor,
-} from "@fensak-io/senc-schemastore-ciconfig";
 
 export const rustDockerImg = "cimg/rust:1.97.1";
 export const rustWithNodeDockerImg = "cimg/rust:1.97.1-node";
@@ -59,6 +54,22 @@ export const addRestoreCacheStep = {
   },
 };
 
+type ExecutorEnvironment = Record<string, string | number | boolean>;
+type DockerExecutor = {
+  docker: { image: string }[];
+  resource_class?: string;
+};
+type MacosExecutor = {
+  macos: { xcode: string | number };
+  resource_class?: string;
+  environment?: ExecutorEnvironment;
+};
+type MachineExecutor = {
+  machine: { image: string };
+  resource_class?: string;
+  shell?: string;
+  environment?: ExecutorEnvironment;
+};
 type Executor = DockerExecutor | MacosExecutor | MachineExecutor;
 
 export const executors: Record<string, Executor> = {
@@ -94,14 +105,15 @@ export const executors: Record<string, Executor> = {
 
 export function getBuildUnixJob(exec: Executor, artifactName: string): any {
   const baseSteps: any = [addSSHKeyStep, "checkout", addRestoreCacheStep.build];
-  if (exec.macos) {
+  if ("macos" in exec) {
     baseSteps.push({
       run: {
         name: "install rust",
         command: `
 brew install rustup
-rustup-init -y
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> "$BASH_ENV"
+export PATH="$(brew --prefix rustup)/bin:$PATH"
+rustup default stable
+echo 'export PATH="$(brew --prefix rustup)/bin:$PATH"' >> "$BASH_ENV"
 `,
       },
     });
