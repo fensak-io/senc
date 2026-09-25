@@ -1,7 +1,6 @@
 // Copyright (c) Fensak, LLC.
 // SPDX-License-Identifier: MPL-2.0
 
-
 export const rustDockerImg = "cimg/rust:1.97.1";
 export const rustWithNodeDockerImg = "cimg/rust:1.97.1-node";
 export const dockerCfgRustImg = [{ image: rustDockerImg }];
@@ -82,9 +81,9 @@ export const executors: Record<string, Executor> = {
   },
   macos: {
     macos: {
-      xcode: "15.0.0",
+      xcode: "27.2",
     },
-    resource_class: "macos.m1.medium.gen1",
+    resource_class: "m4pro.medium",
     environment: {
       HOMEBREW_NO_AUTO_UPDATE: 1,
     },
