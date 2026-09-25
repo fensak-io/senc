@@ -17,6 +17,7 @@ import {
 const semanticReleasePlugins = [
   "conventional-changelog-conventionalcommits",
   "semantic-release-replace-plugin",
+  "@semantic-release/exec",
   "@semantic-release/git",
 ];
 const filterMainBranches = {
@@ -163,6 +164,8 @@ test -n "$GITHUB_TOKEN"
 git remote set-url origin "https://x-access-token:\${GITHUB_TOKEN}@github.com/fensak-io/senc.git"
 
 npm install ${semanticReleasePlugins.join(" ")}
+export NPM_ID_TOKEN="$(circleci run oidc get --claims '{"aud":"npm:registry.npmjs.org"}')"
+test -n "$NPM_ID_TOKEN"
 npx -y semantic-release@^25.0.9
 `,
           },
