@@ -7,8 +7,8 @@ import {
   MachineExecutor,
 } from "@fensak-io/senc-schemastore-ciconfig";
 
-export const rustDockerImg = "cimg/rust:1.73";
-export const rustWithNodeDockerImg = "cimg/rust:1.73-node";
+export const rustDockerImg = "cimg/rust:1.97.1";
+export const rustWithNodeDockerImg = "cimg/rust:1.97.1-node";
 export const dockerCfgRustImg = [{ image: rustDockerImg }];
 export const dockerCfgRustWithNodeImg = [{ image: rustWithNodeDockerImg }];
 export const outPrefix = `# Copyright (c) Fensak, LLC.

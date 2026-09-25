@@ -22,6 +22,12 @@ use crate::validator::DataSchema;
 // Load and embed the runtime snapshot built from the build script.
 static RUNTIME_SNAPSHOT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/SENC_SNAPSHOT.bin"));
 
+extension!(
+    builtins,
+    js = [dir "src/builtins", "console.js", "path.js", "senc.js"],
+    docs = "Built in functions for senc.",
+);
+
 // The runtime context, containing various metadata that is used by the builtin operations.
 #[derive(Clone)]
 pub struct Context {
@@ -114,13 +120,13 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
         module_loader::TsModuleLoader::new(ctx.projectroot.clone(), ctx.node_modules_dir.clone());
     let opext = Extension {
         name: "opbuiltins",
-        ops: Cow::Borrowed(&[
-            ops::op_log_trace::DECL,
-            ops::op_log_debug::DECL,
-            ops::op_log_info::DECL,
-            ops::op_log_warn::DECL,
-            ops::op_log_error::DECL,
-            ops::op_path_relpath::DECL,
+        ops: Cow::Owned(vec![
+            ops::op_log_trace(),
+            ops::op_log_debug(),
+            ops::op_log_info(),
+            ops::op_log_warn(),
+            ops::op_log_error(),
+            ops::op_path_relpath(),
         ]),
         middleware_fn: Some(Box::new(|op| match op.name {
             "op_print" => op.disable(),
@@ -131,11 +137,11 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
     let tmplext = load_templated_builtins(ctx, req)?;
     let opts = RuntimeOptions {
         module_loader: Some(Rc::new(modloader)),
-        extensions: vec![opext, tmplext],
+        extensions: vec![builtins::init(), opext, tmplext],
         // NOTE
         // This snapshot contains the builtins/*.js scripts and is constructed in the build.rs
         // script.
-        startup_snapshot: Some(Snapshot::Static(RUNTIME_SNAPSHOT)),
+        startup_snapshot: Some(RUNTIME_SNAPSHOT),
         ..Default::default()
     };
     Ok(JsRuntime::new(opts))
@@ -144,11 +150,10 @@ fn new_runtime(ctx: &Context, req: &RunRequest) -> Result<JsRuntime> {
 // Load the main module. The main module is the main entrypoint that is being executed by senc.
 async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result<usize> {
     let main_module = resolve_path(file_path, std::env::current_dir()?.as_path())?;
-    let mod_id = js_runtime.load_main_module(&main_module, None).await?;
+    let mod_id = js_runtime.load_main_es_module(&main_module).await?;
     let result = js_runtime.mod_evaluate(mod_id);
     let opts = PollEventLoopOptions {
         wait_for_inspector: false,
-        pump_v8_message_loop: true,
     };
     js_runtime.run_event_loop(opts).await?;
     result.await?;
@@ -159,14 +164,14 @@ async fn load_main_module(js_runtime: &mut JsRuntime, file_path: &str) -> Result
 // main module script.
 fn load_main_fn(js_runtime: &mut JsRuntime, mod_id: usize) -> Result<v8::Global<v8::Function>> {
     let ns = js_runtime.get_module_namespace(mod_id)?;
-    let mut scope = js_runtime.handle_scope();
-    let main_fn_key = v8::String::new(&mut scope, "main").unwrap();
+    deno_core::scope!(scope, js_runtime);
+    let main_fn_key = v8::String::new(scope, "main").unwrap();
     let main_fn_local: v8::Local<v8::Function> = ns
-        .open(&mut scope)
-        .get(&mut scope, main_fn_key.into())
+        .open(scope)
+        .get(scope, main_fn_key.into())
         .unwrap()
         .try_into()?;
-    let main_fn = v8::Global::new(&mut scope, main_fn_local);
+    let main_fn = v8::Global::new(scope, main_fn_local);
     return Ok(main_fn);
 }
 
@@ -177,20 +182,19 @@ async fn call_main_fn(
     main_fn: v8::Global<v8::Function>,
 ) -> Result<v8::Global<v8::Value>> {
     match ctx.tla_jsons {
-        None => js_runtime.call(&main_fn).await,
+        None => Ok(js_runtime.call(&main_fn).await?),
         Some(_) => {
             let mut args: vec::Vec<v8::Global<v8::Value>> = vec::Vec::new();
             {
-                let mut scope = js_runtime.handle_scope();
+                deno_core::scope!(scope, js_runtime);
                 for tla in ctx.tla_jsons.iter().flatten() {
                     let v: serde_json::Value = serde_json::from_str(&tla)?;
-                    let deserialized_tla_local =
-                        serde_v8::to_v8::<serde_json::Value>(&mut scope, v)?;
-                    let deserialized_tla = v8::Global::new(&mut scope, deserialized_tla_local);
+                    let deserialized_tla_local = serde_v8::to_v8::<serde_json::Value>(scope, v)?;
+                    let deserialized_tla = v8::Global::new(scope, deserialized_tla_local);
                     args.push(deserialized_tla);
                 }
             }
-            js_runtime.call_with_args(&main_fn, &args).await
+            Ok(js_runtime.call_with_args(&main_fn, &args).await?)
         }
     }
 }
@@ -204,22 +208,22 @@ fn load_result(
 ) -> Result<vec::Vec<OutData>> {
     let mut out: vec::Vec<OutData> = vec::Vec::new();
 
-    let mut scope = &mut js_runtime.handle_scope();
-    let result_local = v8::Local::new(&mut scope, result);
+    deno_core::scope!(scope, js_runtime);
+    let result_local = v8::Local::new(scope, result);
 
     // Determine if the raw JS object from the runtime is an out data list object, in which case
     // each element needs to be cycled and converted.
-    if result_is_sencjs_out_data_array(&mut scope, result_local)? {
+    if result_is_sencjs_out_data_array(scope, result_local)? {
         let result_arr: v8::Local<v8::Array> = result_local.try_into()?;
         let result_arr_raw: &v8::Array = result_arr.borrow();
         let sz = result_arr_raw.length();
         for i in 0..sz {
-            let item = result_arr_raw.get_index(&mut scope, i).unwrap();
-            let single_out = load_one_result(script_dir, &mut scope, item)?;
+            let item = result_arr_raw.get_index(scope, i).unwrap();
+            let single_out = load_one_result(script_dir, scope, item)?;
             out.push(single_out);
         }
     } else {
-        let single_out = load_one_result(script_dir, &mut scope, result_local)?;
+        let single_out = load_one_result(script_dir, scope, result_local)?;
         out.push(single_out);
     }
 
@@ -232,7 +236,7 @@ fn load_result(
 // - Anything else would be treated as raw object to be serialized to JSON.
 fn load_one_result<'a>(
     script_dir: &path::Path,
-    scope: &mut v8::HandleScope<'a>,
+    scope: &mut v8::PinScope<'a, '_>,
     orig_result_local: v8::Local<'a, v8::Value>,
 ) -> Result<OutData> {
     let mut result_local = orig_result_local.clone();
@@ -277,7 +281,7 @@ fn load_one_result<'a>(
 // Load a single result from the main function that is a JS OutData object (not to be confused with
 // the OutData struct defined in this file).
 fn load_one_sencjs_out_data_result<'a>(
-    scope: &mut v8::HandleScope<'a>,
+    scope: &mut v8::PinScope<'a, '_>,
     result_local: v8::Local<'a, v8::Value>,
 ) -> Result<(
     // out_path
@@ -303,8 +307,8 @@ fn load_one_sencjs_out_data_result<'a>(
     let out_type_key: v8::Local<v8::Value> = v8::String::new(scope, "out_type").unwrap().into();
     let out_type_local: v8::Local<v8::String> =
         result_obj.get(scope, out_type_key).unwrap().try_into()?;
-    let out_type_str: &str = &out_type_local.to_rust_string_lossy(scope);
-    match out_type_str {
+    let out_type_str: String = serde_v8::from_v8(scope, out_type_local.into())?;
+    match out_type_str.as_str() {
         "yaml" => {
             out_type = OutputType::YAML;
             out_ext = Some(String::from(".yaml"));
@@ -329,22 +333,22 @@ fn load_one_sencjs_out_data_result<'a>(
         ));
     } else if maybe_out_path.is_string() {
         let out_path_local: v8::Local<v8::String> = maybe_out_path.try_into()?;
-        out_path = Some(out_path_local.to_rust_string_lossy(scope));
+        out_path = Some(serde_v8::from_v8(scope, out_path_local.into())?);
         out_ext = None;
     } else if maybe_out_ext.is_string() {
         let out_ext_local: v8::Local<v8::String> = maybe_out_ext.try_into()?;
-        out_ext = Some(out_ext_local.to_rust_string_lossy(scope));
+        out_ext = Some(serde_v8::from_v8(scope, out_ext_local.into())?);
         out_path = None;
     }
 
     if maybe_out_prefix.is_string() {
         let out_prefix_local: v8::Local<v8::String> = maybe_out_prefix.try_into()?;
-        out_prefix = Some(out_prefix_local.to_rust_string_lossy(scope));
+        out_prefix = Some(serde_v8::from_v8(scope, out_prefix_local.into())?);
     }
 
     if maybe_schema_path.is_string() {
         let schema_path_local: v8::Local<v8::String> = maybe_schema_path.try_into()?;
-        schema_path = Some(schema_path_local.to_rust_string_lossy(scope));
+        schema_path = Some(serde_v8::from_v8(scope, schema_path_local.into())?);
     }
 
     let out_data_key: v8::Local<v8::Value> = v8::String::new(scope, "data").unwrap().into();
@@ -361,7 +365,7 @@ fn load_one_sencjs_out_data_result<'a>(
 // Checks whether the result from the main function is a JS OutData object from senc.js. It is a JS
 // OutData object if it is an Object and it has the `__is_senc_out_data` method.
 fn result_is_sencjs_out_data(
-    scope: &mut v8::HandleScope,
+    scope: &mut v8::PinScope,
     result_local: v8::Local<v8::Value>,
 ) -> Result<bool> {
     if !result_local.is_object() {
@@ -378,7 +382,7 @@ fn result_is_sencjs_out_data(
 // Checks whether the result from the main function is a JS OutDataArray object from senc.js. It is
 // a JS OutDataArray object if it is an Array and it has the `__is_senc_out_data_array` method.
 fn result_is_sencjs_out_data_array(
-    scope: &mut v8::HandleScope,
+    scope: &mut v8::PinScope,
     result_local: v8::Local<v8::Value>,
 ) -> Result<bool> {
     if !result_local.is_array() {
@@ -481,8 +485,10 @@ fn load_templated_builtins(ctx: &Context, req: &RunRequest) -> Result<Extension>
     let rendered = hbs.render("t1", &hbdata).unwrap();
 
     let specifier = "ext:builtins/staticpath.js";
-    let code = ExtensionFileSourceCode::Computed(rendered.into());
-    let files = vec![ExtensionFileSource { specifier, code }];
+    let files = vec![ExtensionFileSource::new_computed(
+        specifier,
+        rendered.into(),
+    )];
     let ext = Extension {
         name: "templatedbuiltins",
         esm_entry_point: Some(specifier),
