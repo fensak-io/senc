@@ -15,7 +15,10 @@ import {
 } from "./common.ts";
 
 const semanticReleasePlugins = [
-  "conventional-changelog-conventionalcommits",
+  // semantic-release 25 uses conventional-changelog-writer 8. The current
+  // conventionalcommits preset requires writer 9, so keep the preset on its
+  // compatible major until semantic-release is upgraded.
+  "conventional-changelog-conventionalcommits@^8",
   "semantic-release-replace-plugin",
   "@semantic-release/exec",
   "@semantic-release/git",
